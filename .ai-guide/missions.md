@@ -3,7 +3,7 @@
 **Project**: AgentLens
 **Intent**: build → ship → client-ready → live demo → outreach
 **Total Missions**: 14
-**Current**: Checkpoint 1
+**Current**: Checkpoint 2
 
 ---
 
@@ -33,16 +33,9 @@
 
 ## Phase 2 — Ship It (package + confirm)
 
-- 🔒 **11 — GitHub + Self-Contained Template** — Push to GitHub. Standalone CloudFormation (no SAM CLI). Lambda code as S3 zip. Dashboard build as S3 asset. `publish.sh`: build → zip → upload → Launch Stack URL.
-  - **Agent A**: Convert SAM template → standalone CloudFormation YAML (inline Lambda zip from S3, no transforms)
-  - **Agent B**: Build `publish.sh` script (build proxy zip, build dashboard, upload to S3 release bucket, output Launch Stack URL)
-  - **Agent C**: Initialize GitHub repo, .gitignore, push all code
-  - **Sequential**: Test publish.sh end-to-end after A+B complete
+- ✅ **11 — GitHub + Self-Contained Template** — Pushed to https://github.com/Abhipaddy8/agentlens. Standalone CloudFormation (no SAM). Lambda code via S3 zip. Dashboard deployed via CF custom resource. `publish.sh` generates Launch Stack URL. 61 files, 26,397 lines.
 
-- 🔒 **12 — One-Click Deploy** — "Deploy to AWS" button in README. Pre-fills stack name, only asks for OpenAI key. CloudFormation outputs show dashboard URL + proxy endpoint. Click → working in 18 min.
-  - **Agent A**: Write README with Launch Stack badge, architecture diagram (ASCII), quick-start
-  - **Agent B**: Add CloudFormation outputs (DashboardURL, ProxyEndpoint, SetupInstructions post-deploy)
-  - **Sequential**: Verify full flow — click badge → stack creates → outputs show correct URLs
+- ✅ **12 — One-Click Deploy** — README with Deploy to AWS badge, ASCII architecture diagram, before/after integration code, full API reference. CloudFormation outputs include SetupComplete with proxy URL + dashboard URL + next steps.
 
 > **🛑 CHECKPOINT 2**: Abhishek confirms one-click deploy works before outreach.
 

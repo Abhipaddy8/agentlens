@@ -59,21 +59,35 @@ That is it. No SDK, no wrapper library, no code refactor. Any OpenAI-compatible 
 
 ## Dashboard
 
-Screenshots coming soon.
+### Overview — Total spend, savings, blocked calls, active agents
+![Overview](screenshots/overview.png)
 
-**9 screens included:**
+### Agent Breakdown — Per-agent cost, cache hits, status (active/killed/rate limited)
+![Agent Breakdown](screenshots/agent-breakdown.png)
 
-| Screen | What It Shows |
-|--------|---------------|
-| Overview | Total spend, call volume, cache hit rate, savings |
-| Agents | Per-agent cost breakdown and activity |
-| Workflows | Grouped view of related calls |
-| Cache | Hit/miss rates, cached queries, TTL settings |
-| Routing | Model routing rules and downgrades |
-| Controls | Kill switches, budget caps, rate limits |
-| Versions | Prompt version history and A/B comparison |
-| Simulator | Test prompts against routing and cache rules |
-| CFO View | Executive summary -- monthly burn, projected savings, ROI |
+### Waste Detection — Flags agents consuming disproportionate spend with zero cache hits
+![Waste Alert](screenshots/waste-alert.png)
+
+### Agent Ranking — All agents ranked by spend with HIGH SPEND flags
+![Agent Ranking](screenshots/agent-ranking.png)
+
+### Workflows — Grouped call chains showing cost per workflow and agents involved
+![Workflows](screenshots/workflows.png)
+
+### Cache Performance — Hit rate, money saved, speed boost (234x), per-agent breakdown
+![Cache Performance](screenshots/cache-performance.png)
+
+### Cache Savings by Agent — Hit rates, cached vs uncached latency, per-agent speedup
+![Cache Savings](screenshots/cache-savings.png)
+
+### Smart Routing — Model downgrades, before/after cost comparison, per-agent savings
+![Routing](screenshots/routing.png)
+
+### Routing Savings by Agent — Which agents benefit most from smart model selection
+![Routing Savings](screenshots/routing-savings.png)
+
+### CFO View — Executive summary in plain language. Monthly burn, projected savings, ROI.
+![CFO View](screenshots/cfo-view.png)
 
 ## Deploy to AWS
 
@@ -169,6 +183,18 @@ agentlens/
     run-demo.sh       # Run all demo agents
     seed.js           # Seed demo data
 ```
+
+## Built with NPC Guide
+
+This entire project was built in a single Claude Code session using [NPC Guide](https://github.com/Abhipaddy8/npc-guide-ai) — a mission system for AI coding agents.
+
+One brief. 7 missions generated. 7 missions completed autonomously. The agent only asked for file write permissions — zero architecture questions, zero "should I start?" prompts.
+
+**What NPC Guide provided:**
+- Mission map: 7 sequential missions from Proxy MVP to Ship
+- Architecture doc: stack decisions, DynamoDB schema, proxy flow
+- Decision log: 6 founding decisions (Node.js, DynamoDB, React, CloudFormation, monorepo, OpenAI-only v1)
+- Session context injection so the agent never lost track of where it was
 
 ## License
 
