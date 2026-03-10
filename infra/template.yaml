@@ -1,0 +1,310 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  AgentLens — LLM cost optimization proxy.
+  Intercepts, controls, and logs every AI call.
+  One-click deploy into any AWS account.
+
+Parameters:
+  OpenAIApiKey:
+    Type: String
+    NoEcho: true
+    Description: Your OpenAI API key (sk-...)
+
+  DefaultRPM:
+    Type: Number
+    Default: 60
+    Description: Default rate limit (requests per minute) per agent
+
+  CacheTTLHours:
+    Type: Number
+    Default: 24
+    Description: Cache time-to-live in hours
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs20.x
+    MemorySize: 256
+    Environment:
+      Variables:
+        OPENAI_API_KEY: !Ref OpenAIApiKey
+        DEFAULT_RPM: !Ref DefaultRPM
+        CACHE_TTL_HOURS: !Ref CacheTTLHours
+        TABLE_CALLS: !Ref CallsTable
+        TABLE_BUDGETS: !Ref BudgetsTable
+        TABLE_CACHE: !Ref CacheTable
+        TABLE_CONTROLS: !Ref ControlsTable
+        TABLE_AGENTS: !Ref AgentsTable
+        TABLE_VERSIONS: !Ref PromptVersionsTable
+
+Resources:
+
+  # ==========================================
+  # DynamoDB Tables
+  # ==========================================
+
+  CallsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-calls'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: callId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: callId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: timestamp-index
+          KeySchema:
+            - AttributeName: agentId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  BudgetsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-budgets'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+
+  CacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-cache'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: cacheKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cacheKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  ControlsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-controls'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+
+  AgentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-agents'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+
+  PromptVersionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-prompt-versions'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: version
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: version
+          KeyType: RANGE
+
+  # ==========================================
+  # Lambda Function
+  # ==========================================
+
+  ProxyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-proxy'
+      Handler: proxy/src/lambda.handler
+      CodeUri: ../
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CallsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BudgetsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CacheTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ControlsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AgentsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PromptVersionsTable
+      Events:
+        ProxyAll:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+        ProxyRoot:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+      FunctionUrlConfig:
+        AuthType: NONE
+        Cors:
+          AllowOrigins:
+            - '*'
+          AllowHeaders:
+            - Content-Type
+            - Authorization
+            - x-agent-id
+            - x-workflow-id
+            - x-prompt-version
+          AllowMethods:
+            - '*'
+          MaxAge: 300
+
+  # ==========================================
+  # API Gateway (HTTP API)
+  # ==========================================
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - x-agent-id
+          - x-workflow-id
+          - x-prompt-version
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  # ==========================================
+  # Dashboard Hosting (S3 + CloudFront)
+  # ==========================================
+
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-dashboard-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${DashboardBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${DashboardDistribution}'
+
+  DashboardOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-dashboard-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  DashboardDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: DashboardS3
+            DomainName: !GetAtt DashboardBucket.RegionalDomainName
+            OriginAccessControlId: !Ref DashboardOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: DashboardS3
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
+          Compress: true
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        PriceClass: PriceClass_100
+
+# ==========================================
+# Outputs
+# ==========================================
+
+Outputs:
+  ProxyEndpoint:
+    Description: AgentLens proxy endpoint — set this as your OPENAI_BASE_URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+
+  ProxyFunctionUrl:
+    Description: Lambda Function URL (alternative to API Gateway)
+    Value: !GetAtt ProxyFunctionUrl.FunctionUrl
+
+  DashboardUrl:
+    Description: AgentLens dashboard URL
+    Value: !Sub 'https://${DashboardDistribution.DomainName}'
+
+  DashboardBucketName:
+    Description: S3 bucket for dashboard files — deploy with 'aws s3 sync dashboard/build/ s3://<bucket>'
+    Value: !Ref DashboardBucket
+
+  StackRegion:
+    Description: AWS region where AgentLens is deployed
+    Value: !Ref AWS::Region
+
+  InstallInstructions:
+    Description: Quick start
+    Value: !Sub |
+      1. Set OPENAI_BASE_URL=https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+      2. Add x-agent-id header to each agent
+      3. Open dashboard: https://${DashboardDistribution.DomainName}

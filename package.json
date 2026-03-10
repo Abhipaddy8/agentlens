@@ -1,0 +1,29 @@
+{
+  "name": "agentlens",
+  "version": "1.0.0",
+  "description": "LLM cost optimization proxy — intercepts, controls, and logs every AI call",
+  "main": "proxy/src/handler.js",
+  "scripts": {
+    "dev": "node proxy/src/server.js",
+    "demo": "node demo/demo-server.js",
+    "demo:seed": "node demo/seed.js",
+    "demo:generate": "node demo/generate-static.js",
+    "test": "node proxy/test/test-proxy.js",
+    "setup:local": "node infra/setup-local.js",
+    "deploy": "bash infra/deploy.sh",
+    "teardown": "aws cloudformation delete-stack --stack-name ${STACK_NAME:-agentlens} --region ${AWS_REGION:-us-east-1}"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1005.0",
+    "@aws-sdk/lib-dynamodb": "^3.1005.0",
+    "dotenv": "^17.3.1",
+    "npc-guide": "file:../npc-guide-ai/packages/core",
+    "npc-guide-ai": "file:../npc-guide-ai",
+    "openai": "^6.27.0",
+    "uuid": "^13.0.0"
+  }
+}

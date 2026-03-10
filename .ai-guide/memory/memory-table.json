@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "windowSize": 15,
+  "items": [
+    {
+      "id": "db988e17-71a5-4daa-8bd3-2e985c124f35",
+      "content": "Dependencies: npc-guide-ai",
+      "category": "architecture",
+      "sessionsActive": 3,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T07:02:38.386Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "33631c53-7478-431b-bf32-39ace9ad69f9",
+      "content": "Project: OperaERP. Intent: ops",
+      "category": "architecture",
+      "sessionsActive": 3,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T07:03:48.836Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "d269c52d-4d7a-4fba-b5a4-aba4bb744eb5",
+      "content": "# Decisions Log — AgentLens",
+      "category": "decision",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 1,
+      "status": "active",
+      "createdAt": "2026-03-10T09:47:18.551Z",
+      "lastHitAt": "2026-03-10T09:47:18.554Z"
+    },
+    {
+      "id": "f2c7bfdb-cfa8-4d0f-a36c-e65f1fcccdb4",
+      "content": "Use Node.js for proxy — OpenAI SDK is Node-native, Lambda has first-class Node support, matches team skills",
+      "category": "decision",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.551Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "6a953e6d-03e2-49b8-8eb6-9de274683d5c",
+      "content": "DynamoDB over Postgres — Serverless, scales with Lambda, sub-100ms reads, no connection pooling needed, pay-per-request",
+      "category": "decision",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.551Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "5d929390-2d7c-40ae-b2d8-f27583776da3",
+      "content": "React for dashboard — Fastest path to 5 screens, massive ecosystem, deploys to S3+CloudFront trivially",
+      "category": "decision",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.551Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "7ac2dedf-1e9f-4a01-a847-dea881ec6d31",
+      "content": "CloudFormation over Terraform — Native AWS, customers click one link in AWS console, no external tooling required",
+      "category": "decision",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.551Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "a7b2d41f-f112-42b7-9d6b-df661987cf90",
+      "content": "Monorepo structure (proxy/ dashboard/ infra/ demo/) — Single repo for all components, simpler CI, one git history",
+      "category": "decision",
+      "sessionsActive": 0,
+      "cosineSimilarityHits": 1,
+      "status": "active",
+      "createdAt": "2026-03-10T09:47:18.551Z",
+      "lastHitAt": "2026-03-10T10:47:39.828Z"
+    },
+    {
+      "id": "406035f1-3c55-46ed-86be-656993e7574b",
+      "content": "OpenAI-compatible endpoint only (v1) — 80%+ of enterprise LLM spend is OpenAI. Anthropic/others come after first customer.",
+      "category": "decision",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.551Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "819f7081-3745-4147-ad4c-94fb4ff0b5cb",
+      "content": "Mission completed: Proxy MVP: Node.js Lambda. One OpenAI-compatible endpoint (`/v1/chat/completions`). DynamoDB writes (calls table). Kill switch check, budget check, passthrough to OpenAI. `x-agent-id` header parsing. Returns identical response format.",
+      "category": "progress",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.552Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "f5c7eb99-eee0-432f-959a-b2cdf402a0a8",
+      "content": "Mission completed: Cache + Router: DynamoDB reads for semantic cache (cache table). Rules-based model router. Budget tracking (budgets table). Real savings visible in call logs.",
+      "category": "progress",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.552Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "03acc8f5-c299-4017-acf1-c8ad1bfa2727",
+      "content": "Mission completed: Dashboard: React app, 5 screens. Overview (total spend, agent breakdown). Agent drill-down (waste flags, the number that hurts). Controls panel (working kill switches). Live simulator (real cache hits). CFO view (spend vs ROI).",
+      "category": "progress",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.552Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "e8269d92-8746-4c87-939d-049e67ba553d",
+      "content": "Mission completed: OperaERP Demo: Seed DynamoDB with 3 weeks of realistic data. 6 agents. Procurement Agent villain (42% spend, $1,840/month on one pattern). Day 14 anomaly (Supplier Validator loop, $840 in 3 hours). Live simulator firing real queries through real proxy.",
+      "category": "progress",
+      "sessionsActive": 1,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T09:47:18.553Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "c7ac0b66-bd43-46c3-9400-9d83d89c0b5a",
+      "content": "Mission completed: Dashboard: React app, 7 screens. Overview, Agents, Workflows, Controls, Versions, Simulator, CFO View.",
+      "category": "progress",
+      "sessionsActive": 0,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T10:47:39.824Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "0925e5dc-ed90-4667-aed5-d28bf260f2dc",
+      "content": "Mission completed: Advanced Features: Workflow grouping (`x-workflow-id`). Per-agent rate limiting (RPM ceiling). Prompt versioning (version, track quality, one-click rollback). Streaming pass-through (log async, first token no delay).",
+      "category": "progress",
+      "sessionsActive": 0,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T10:47:39.824Z",
+      "lastHitAt": null
+    },
+    {
+      "id": "d6498a0d-6015-4fc8-9ef3-d073f31e3b48",
+      "content": "Mission completed: CloudFormation: SAM template: Lambda + 6 DynamoDB tables + HTTP API Gateway + S3 + CloudFront (OAC). 3 parameters (OpenAI key, RPM, cache TTL). Deploy script with 4-step pipeline. `npm run deploy` one-command.",
+      "category": "progress",
+      "sessionsActive": 0,
+      "cosineSimilarityHits": 1,
+      "status": "active",
+      "createdAt": "2026-03-10T10:47:39.825Z",
+      "lastHitAt": "2026-03-10T10:47:39.828Z"
+    },
+    {
+      "id": "bae9a786-91db-4a52-9bc9-50b641832225",
+      "content": "Mission completed: Ship: 38/38 integration tests passing. INSTALL.md with 3-step install story. Full env var docs. All endpoints documented. Demo server runs standalone.",
+      "category": "progress",
+      "sessionsActive": 0,
+      "cosineSimilarityHits": 0,
+      "status": "new",
+      "createdAt": "2026-03-10T10:47:39.826Z",
+      "lastHitAt": null
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "overview": {
+    "totalCalls": 5527,
+    "totalCost": 32.83,
+    "totalSaved": 0,
+    "cacheHitRate": 0,
+    "routedCalls": 0,
+    "killedCalls": 0,
+    "budgetBlocked": 0
+  },
+  "agents": [
+    {
+      "agentId": "procurement-agent",
+      "calls": 1158,
+      "cost": 13.53,
+      "saved": 0,
+      "cacheHits": 0,
+      "routed": 0,
+      "killed": 0,
+      "budgetBlocked": 0
+    },
+    {
+      "agentId": "supplier-validator",
+      "calls": 1027,
+      "cost": 9.74,
+      "saved": 0,
+      "cacheHits": 0,
+      "routed": 0,
+      "killed": 0,
+      "budgetBlocked": 0
+    },
+    {
+      "agentId": "inventory-forecaster",
+      "calls": 419,
+      "cost": 8.73,
+      "saved": 0,
+      "cacheHits": 0,
+      "routed": 0,
+      "killed": 0,
+      "budgetBlocked": 0
+    },
+    {
+      "agentId": "customer-support-bot",
+      "calls": 2057,
+      "cost": 0.43,
+      "saved": 0,
+      "cacheHits": 0,
+      "routed": 0,
+      "killed": 0,
+      "budgetBlocked": 0
+    },
+    {
+      "agentId": "report-generator",
+      "calls": 165,
+      "cost": 0.28,
+      "saved": 0,
+      "cacheHits": 0,
+      "routed": 0,
+      "killed": 0,
+      "budgetBlocked": 0
+    },
+    {
+      "agentId": "email-drafter",
+      "calls": 701,
+      "cost": 0.11,
+      "saved": 0,
+      "cacheHits": 0,
+      "routed": 0,
+      "killed": 0,
+      "budgetBlocked": 0
+    }
+  ],
+  "meta": {
+    "company": "OperaERP",
+    "description": "Mid-size manufacturing company — 6 AI agents, 3 weeks of data",
+    "generatedAt": "2026-03-10T07:25:47.359Z",
+    "villain": "procurement-agent — 42% of spend, one repeated query pattern burning $1,840/month",
+    "anomaly": "supplier-validator — Day 14, looped for 3 hours, 420 calls on gpt-4o, ~$840"
+  }
+}

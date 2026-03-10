@@ -1,0 +1,533 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AgentLens — LLM cost optimization proxy.
+  Intercepts, controls, and logs every AI call.
+  One-click deploy into any AWS account (standalone CloudFormation — no SAM CLI required).
+
+Parameters:
+  OpenAIApiKey:
+    Type: String
+    NoEcho: true
+    Description: Your OpenAI API key (sk-...)
+
+  DefaultRPM:
+    Type: Number
+    Default: 60
+    Description: Default rate limit (requests per minute) per agent
+
+  CacheTTLHours:
+    Type: Number
+    Default: 24
+    Description: Cache time-to-live in hours
+
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket containing the Lambda zip and dashboard build
+
+  LambdaZipKey:
+    Type: String
+    Default: agentlens/proxy.zip
+    Description: S3 key for the Lambda deployment package
+
+  DashboardZipKey:
+    Type: String
+    Default: agentlens/dashboard.zip
+    Description: S3 key for the dashboard build
+
+Resources:
+
+  # ==========================================
+  # DynamoDB Tables
+  # ==========================================
+
+  CallsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-calls'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: callId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: callId
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: timestamp-index
+          KeySchema:
+            - AttributeName: agentId
+              KeyType: HASH
+            - AttributeName: timestamp
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  BudgetsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-budgets'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+
+  CacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-cache'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: cacheKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: cacheKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  ControlsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-controls'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+
+  AgentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-agents'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+
+  PromptVersionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-prompt-versions'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: version
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: version
+          KeyType: RANGE
+
+  # ==========================================
+  # IAM Role for Lambda
+  # ==========================================
+
+  ProxyFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-proxy-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBCrud
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt CallsTable.Arn
+                  - !Sub '${CallsTable.Arn}/index/*'
+                  - !GetAtt BudgetsTable.Arn
+                  - !Sub '${BudgetsTable.Arn}/index/*'
+                  - !GetAtt CacheTable.Arn
+                  - !Sub '${CacheTable.Arn}/index/*'
+                  - !GetAtt ControlsTable.Arn
+                  - !Sub '${ControlsTable.Arn}/index/*'
+                  - !GetAtt AgentsTable.Arn
+                  - !Sub '${AgentsTable.Arn}/index/*'
+                  - !GetAtt PromptVersionsTable.Arn
+                  - !Sub '${PromptVersionsTable.Arn}/index/*'
+
+  # ==========================================
+  # Lambda Function
+  # ==========================================
+
+  ProxyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-proxy'
+      Handler: proxy/src/lambda.handler
+      Runtime: nodejs20.x
+      MemorySize: 256
+      Timeout: 30
+      Role: !GetAtt ProxyFunctionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref LambdaZipKey
+      Environment:
+        Variables:
+          OPENAI_API_KEY: !Ref OpenAIApiKey
+          DEFAULT_RPM: !Ref DefaultRPM
+          CACHE_TTL_HOURS: !Ref CacheTTLHours
+          TABLE_CALLS: !Ref CallsTable
+          TABLE_BUDGETS: !Ref BudgetsTable
+          TABLE_CACHE: !Ref CacheTable
+          TABLE_CONTROLS: !Ref ControlsTable
+          TABLE_AGENTS: !Ref AgentsTable
+          TABLE_VERSIONS: !Ref PromptVersionsTable
+
+  ProxyFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: NONE
+      TargetFunctionArn: !GetAtt ProxyFunction.Arn
+      Cors:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - x-agent-id
+          - x-workflow-id
+          - x-prompt-version
+          - x-cache
+        AllowMethods:
+          - '*'
+        MaxAge: 300
+
+  ProxyFunctionUrlPublicPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProxyFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+
+  # ==========================================
+  # API Gateway (HTTP API)
+  # ==========================================
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - x-agent-id
+          - x-workflow-id
+          - x-prompt-version
+          - x-cache
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: prod
+      AutoDeploy: true
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ProxyFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  HttpApiRouteProxy:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'ANY /{proxy+}'
+      Target: !Sub 'integrations/${HttpApiIntegration}'
+
+  HttpApiRouteRoot:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: 'ANY /'
+      Target: !Sub 'integrations/${HttpApiIntegration}'
+
+  HttpApiLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProxyFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
+
+  # ==========================================
+  # Dashboard Hosting (S3 + CloudFront)
+  # ==========================================
+
+  DashboardBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-dashboard-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  DashboardBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${DashboardBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${DashboardDistribution}'
+
+  DashboardOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-dashboard-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  DashboardDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: DashboardS3
+            DomainName: !GetAtt DashboardBucket.RegionalDomainName
+            OriginAccessControlId: !Ref DashboardOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: DashboardS3
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          Compress: true
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        PriceClass: PriceClass_100
+
+  # ==========================================
+  # Dashboard Deployer (Custom Resource)
+  # ==========================================
+
+  DashboardDeployerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-dashboard-deployer-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub 'arn:aws:s3:::${ArtifactBucket}/${DashboardZipKey}'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt DashboardBucket.Arn
+                  - !Sub '${DashboardBucket.Arn}/*'
+
+  DashboardDeployerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-dashboard-deployer'
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 300
+      MemorySize: 512
+      Role: !GetAtt DashboardDeployerRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import zipfile
+          import io
+          import mimetypes
+          import cfnresponse
+          import traceback
+
+          s3 = boto3.client('s3')
+
+          CONTENT_TYPES = {
+              '.html': 'text/html',
+              '.css': 'text/css',
+              '.js': 'application/javascript',
+              '.json': 'application/json',
+              '.png': 'image/png',
+              '.jpg': 'image/jpeg',
+              '.jpeg': 'image/jpeg',
+              '.svg': 'image/svg+xml',
+              '.ico': 'image/x-icon',
+              '.woff': 'font/woff',
+              '.woff2': 'font/woff2',
+              '.ttf': 'font/ttf',
+              '.map': 'application/json',
+          }
+
+          def get_content_type(key):
+              for ext, ct in CONTENT_TYPES.items():
+                  if key.endswith(ext):
+                      return ct
+              return 'application/octet-stream'
+
+          def handler(event, context):
+              try:
+                  request_type = event['RequestType']
+                  props = event['ResourceProperties']
+                  source_bucket = props['SourceBucket']
+                  source_key = props['SourceKey']
+                  dest_bucket = props['DestBucket']
+
+                  if request_type in ('Create', 'Update'):
+                      # Download zip from source
+                      response = s3.get_object(Bucket=source_bucket, Key=source_key)
+                      zip_bytes = response['Body'].read()
+
+                      # Extract and upload each file
+                      with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+                          for name in zf.namelist():
+                              if name.endswith('/'):
+                                  continue
+                              data = zf.read(name)
+                              content_type = get_content_type(name)
+                              s3.put_object(
+                                  Bucket=dest_bucket,
+                                  Key=name,
+                                  Body=data,
+                                  ContentType=content_type,
+                              )
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {'Status': 'Dashboard deployed'})
+
+                  elif request_type == 'Delete':
+                      # Clean up dashboard files on stack deletion
+                      paginator = s3.get_paginator('list_objects_v2')
+                      for page in paginator.paginate(Bucket=dest_bucket):
+                          for obj in page.get('Contents', []):
+                              s3.delete_object(Bucket=dest_bucket, Key=obj['Key'])
+                      cfnresponse.send(event, context, cfnresponse.SUCCESS, {'Status': 'Dashboard cleaned up'})
+
+              except Exception as e:
+                  print(traceback.format_exc())
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {'Error': str(e)})
+
+  DashboardDeployment:
+    Type: Custom::DashboardDeployer
+    DependsOn:
+      - DashboardBucket
+    Properties:
+      ServiceToken: !GetAtt DashboardDeployerFunction.Arn
+      SourceBucket: !Ref ArtifactBucket
+      SourceKey: !Ref DashboardZipKey
+      DestBucket: !Ref DashboardBucket
+
+# ==========================================
+# Outputs
+# ==========================================
+
+Outputs:
+  ProxyEndpoint:
+    Description: AgentLens proxy endpoint — set this as your OPENAI_BASE_URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
+
+  ProxyFunctionUrl:
+    Description: Lambda Function URL (alternative to API Gateway)
+    Value: !GetAtt ProxyFunctionUrl.FunctionUrl
+
+  DashboardUrl:
+    Description: AgentLens dashboard URL
+    Value: !Sub 'https://${DashboardDistribution.DomainName}'
+
+  DashboardBucketName:
+    Description: S3 bucket for dashboard files
+    Value: !Ref DashboardBucket
+
+  StackRegion:
+    Description: AWS region where AgentLens is deployed
+    Value: !Ref AWS::Region
+
+  InstallInstructions:
+    Description: Quick start
+    Value: !Sub |
+      1. Set OPENAI_BASE_URL=https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+      2. Add x-agent-id header to each agent
+      3. Open dashboard: https://${DashboardDistribution.DomainName}
+
+  SetupComplete:
+    Description: Your AgentLens is ready!
+    Value: !Sub |
+      Proxy: https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+      Dashboard: https://${DashboardDistribution.DomainName}
+
+      Next steps:
+      1. Set your agents' OPENAI_BASE_URL to the proxy URL above
+      2. Add 'x-agent-id: your-agent-name' header to each agent
+      3. Open the dashboard to see real-time data

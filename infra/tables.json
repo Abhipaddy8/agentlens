@@ -1,0 +1,83 @@
+{
+  "tables": [
+    {
+      "TableName": "agentlens-calls",
+      "KeySchema": [
+        { "AttributeName": "agentId", "KeyType": "HASH" },
+        { "AttributeName": "callId", "KeyType": "RANGE" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "agentId", "AttributeType": "S" },
+        { "AttributeName": "callId", "AttributeType": "S" },
+        { "AttributeName": "timestamp", "AttributeType": "S" }
+      ],
+      "GlobalSecondaryIndexes": [
+        {
+          "IndexName": "timestamp-index",
+          "KeySchema": [
+            { "AttributeName": "agentId", "KeyType": "HASH" },
+            { "AttributeName": "timestamp", "KeyType": "RANGE" }
+          ],
+          "Projection": { "ProjectionType": "ALL" }
+        }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "agentlens-budgets",
+      "KeySchema": [
+        { "AttributeName": "agentId", "KeyType": "HASH" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "agentId", "AttributeType": "S" }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "agentlens-cache",
+      "KeySchema": [
+        { "AttributeName": "cacheKey", "KeyType": "HASH" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "cacheKey", "AttributeType": "S" }
+      ],
+      "BillingMode": "PAY_PER_REQUEST",
+      "TimeToLiveSpecification": {
+        "AttributeName": "ttl",
+        "Enabled": true
+      }
+    },
+    {
+      "TableName": "agentlens-controls",
+      "KeySchema": [
+        { "AttributeName": "agentId", "KeyType": "HASH" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "agentId", "AttributeType": "S" }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "agentlens-agents",
+      "KeySchema": [
+        { "AttributeName": "agentId", "KeyType": "HASH" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "agentId", "AttributeType": "S" }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    },
+    {
+      "TableName": "agentlens-prompt-versions",
+      "KeySchema": [
+        { "AttributeName": "agentId", "KeyType": "HASH" },
+        { "AttributeName": "version", "KeyType": "RANGE" }
+      ],
+      "AttributeDefinitions": [
+        { "AttributeName": "agentId", "AttributeType": "S" },
+        { "AttributeName": "version", "AttributeType": "S" }
+      ],
+      "BillingMode": "PAY_PER_REQUEST"
+    }
+  ]
+}

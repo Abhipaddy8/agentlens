@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/equipp/good-llm-cost-saver/npc-guide-ai/packages/core/dist/hooks/session-start.js"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /Users/equipp/good-llm-cost-saver/npc-guide-ai/packages/core/dist/hooks/session-end.js"
+          }
+        ]
+      }
+    ]
+  }
+}
