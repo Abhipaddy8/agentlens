@@ -83,4 +83,48 @@
   .phase-label {
     transition: opacity 0.3s ease, transform 0.3s ease;
   }
+
+  /* Mission map card entrance */
+  @keyframes mission-map-enter {
+    from {
+      opacity: 0;
+      transform: translateY(16px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  .mission-map-card {
+    animation: mission-map-enter 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Staggered mission item entrance */
+  @keyframes mission-item-enter {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .mission-map-item {
+    opacity: 0;
+    animation: mission-item-enter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Compile spinner */
+  @keyframes compile-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .compile-spinner {
+    animation: compile-spin 0.8s linear infinite;
+  }
 }

@@ -1,12 +1,14 @@
 "use client";
 
 import { useChat } from "ai/react";
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatInput } from "@/components/chat-input";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { BriefProgress } from "@/components/brief-progress";
 import { BriefCompleteCard } from "@/components/brief-complete-card";
+import { MissionMapCard } from "@/components/mission-map-card";
+import type { MissionMapData } from "@/components/mission-map-card";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -31,6 +33,7 @@ export function ChatArea({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasSetTitle = useRef<Set<string>>(new Set());
+  const [missionMap, setMissionMap] = useState<MissionMapData | null>(null);
 
   // Compute brief progress based on message count
   const briefProgress = useMemo(() => {
@@ -49,11 +52,12 @@ export function ChatArea({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, missionMap]);
 
   // Clear messages when switching conversations
   useEffect(() => {
     setMessages([]);
+    setMissionMap(null);
   }, [conversationId, setMessages]);
 
   // Auto-title: set conversation title from first user message
@@ -74,6 +78,72 @@ export function ChatArea({
       }
     }
   }, [messages, conversationId, onUpdateTitle]);
+
+  // Check for mission map data in assistant messages (data event pattern)
+  useEffect(() => {
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant");
+    if (!lastAssistant) return;
+
+    // Check if the message content contains a mission map JSON block
+    const mapMatch = lastAssistant.content.match(
+      /<!-- MISSION_MAP_START -->([\s\S]*?)<!-- MISSION_MAP_END -->/
+    );
+    if (mapMatch) {
+      try {
+        const parsed = JSON.parse(mapMatch[1]) as MissionMapData;
+        setMissionMap(parsed);
+      } catch {
+        // Invalid JSON — ignore
+      }
+    }
+  }, [messages]);
+
+  const handleCompile = useCallback(async () => {
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "compile", messages }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.missionMap) {
+          setMissionMap(data.missionMap);
+        }
+      }
+    } catch {
+      // Silently handle
+    }
+  }, [messages]);
+
+  const handleStartBuilding = useCallback(() => {
+    // Emit a user message to kick off the build
+    // For now, this is a placeholder — the backend will handle the actual build
+    const fakeEvent = {
+      preventDefault: () => {},
+    } as React.FormEvent;
+
+    // Add a system-like message indicating build start
+    setMessages([
+      ...messages,
+      {
+        id: `build-start-${Date.now()}`,
+        role: "user" as const,
+        content: "Let's go. Start building.",
+        createdAt: new Date(),
+      },
+    ]);
+
+    handleSubmit(fakeEvent);
+  }, [messages, setMessages, handleSubmit]);
+
+  const handleModify = useCallback(() => {
+    // Clear the mission map so user can keep chatting
+    setMissionMap(null);
+  }, []);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -191,9 +261,24 @@ export function ChatArea({
                 <ThinkingIndicator />
               )}
 
-            {/* Brief complete card */}
+            {/* Brief complete card — shows inline mission map when available */}
             {isBriefComplete && !isLoading && (
-              <BriefCompleteCard messages={messages} />
+              <BriefCompleteCard
+                messages={messages}
+                missionMap={missionMap}
+                onCompile={handleCompile}
+                onStartBuilding={handleStartBuilding}
+                onModify={handleModify}
+              />
+            )}
+
+            {/* Standalone mission map for data injected via message parsing */}
+            {!isBriefComplete && missionMap && (
+              <MissionMapCard
+                data={missionMap}
+                onStartBuilding={handleStartBuilding}
+                onModify={handleModify}
+              />
             )}
           </div>
         )}
