@@ -2,29 +2,43 @@ import { NextRequest } from "next/server";
 import { ConversationController } from "@/lib/controller";
 import { ChatMessage } from "@/lib/types";
 import { compileBrief, parseBrief } from "@/lib/brief-compiler";
-import { buildMissionMap } from "@/lib/mission-architect";
+import { buildMissionMap, MissionMap } from "@/lib/mission-architect";
 import { enrichMissionMap } from "@/lib/task-generator";
+import { BuildRunner, BuildEvent } from "@/lib/build-runner";
 
 /**
  * POST /api/chat
  *
  * Conversation Controller endpoint for AgentLens Studio.
  *
- * Two modes:
+ * Three modes:
  * 1. Normal chat: Takes message history, streams conversational response + metadata.
  * 2. Compile: When { action: "compile" } is sent, runs the full brief-to-mission pipeline:
  *    compileBrief → parseBrief → buildMissionMap → enrichMissionMap → stream result.
+ * 3. Build: When { action: "build", missionMap: {...} } is sent, simulates mission execution
+ *    streaming progress events as SSE data so the frontend can render build progress + games.
  *
  * Streams using Vercel AI SDK data stream format:
  *   0:"token"   — text tokens
- *   2:[...]     — metadata (controller state, mission map, pipeline phases)
+ *   2:[...]     — metadata (controller state, mission map, pipeline phases, build events)
  *   d:{...}     — finish signal
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { messages, action } = body;
+  const { messages, action, missionMap } = body;
 
-  // Validate messages
+  // --- BUILD ACTION: Simulate mission execution with progress events ---
+  if (action === "build") {
+    if (!missionMap) {
+      return new Response(
+        JSON.stringify({ error: "missionMap is required for build action" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return handleBuild(missionMap as MissionMap);
+  }
+
+  // Validate messages (required for chat and compile actions)
   if (!Array.isArray(messages) || messages.length === 0) {
     return new Response(
       JSON.stringify({ error: "messages array is required" }),
@@ -120,6 +134,111 @@ export async function POST(req: NextRequest) {
       JSON.stringify({ error: errMsg }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
+  }
+}
+
+/**
+ * Handle the build action — simulate mission execution with progress events.
+ *
+ * Creates a BuildRunner and streams all progress events as SSE:
+ *   - Build events go as `2:` data events (metadata channel)
+ *   - Milestone text goes as `0:` text tokens (visible in chat)
+ *
+ * The stream format enables the frontend to:
+ *   1. Show a progress bar / pipeline visualization
+ *   2. Run a mini-game while building
+ *   3. Pause/resume via the BuildRunner
+ */
+async function handleBuild(missionMap: MissionMap) {
+  const encoder = new TextEncoder();
+  const runner = new BuildRunner(missionMap);
+
+  const stream = new ReadableStream({
+    async start(streamController) {
+      try {
+        let tokenCount = 0;
+
+        for await (const event of runner.run()) {
+          // Send every event on the data channel
+          streamController.enqueue(
+            encoder.encode(
+              `2:${JSON.stringify([{ type: "build-event", event }])}\n`
+            )
+          );
+
+          // Also stream human-readable text for key milestones
+          const text = buildEventToText(event);
+          if (text) {
+            tokenCount++;
+            streamController.enqueue(
+              encoder.encode(`0:${JSON.stringify(text)}\n`)
+            );
+          }
+        }
+
+        // Finish signal
+        streamController.enqueue(
+          encoder.encode(
+            `d:${JSON.stringify({
+              finishReason: "stop",
+              usage: { promptTokens: 0, completionTokens: tokenCount },
+            })}\n`
+          )
+        );
+        streamController.close();
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+        streamController.enqueue(
+          encoder.encode(
+            `2:${JSON.stringify([{ type: "build-event", event: { type: "build-error", message: errMsg } }])}\n`
+          )
+        );
+        streamController.enqueue(
+          encoder.encode(
+            `0:${JSON.stringify(`\n\n[Build Error: ${errMsg}]`)}\n`
+          )
+        );
+        streamController.enqueue(
+          encoder.encode(
+            `d:${JSON.stringify({ finishReason: "error", usage: { promptTokens: 0, completionTokens: 0 } })}\n`
+          )
+        );
+        streamController.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+/**
+ * Convert a BuildEvent to a human-readable text string for the chat.
+ * Returns null for events that shouldn't produce visible chat text.
+ */
+function buildEventToText(event: BuildEvent): string | null {
+  switch (event.type) {
+    case "build-start":
+      return `\n**Building ${event.projectName}** — ${event.totalMissions} missions queued\n\n`;
+    case "mission-start":
+      return `### Mission ${event.missionId}: ${event.name}\n`;
+    case "block-complete":
+      return `  [${event.blockName}] done\n`;
+    case "task-log":
+      return `  > ${event.message}\n`;
+    case "mission-complete":
+      return `  Mission ${event.missionId} complete.\n\n`;
+    case "build-complete": {
+      const seconds = Math.round(event.totalTime / 1000);
+      return `---\n\nBuild complete in ${seconds}s. All missions shipped.\n`;
+    }
+    default:
+      return null;
   }
 }
 

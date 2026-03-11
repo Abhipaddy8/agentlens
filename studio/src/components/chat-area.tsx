@@ -8,7 +8,11 @@ import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { BriefProgress } from "@/components/brief-progress";
 import { BriefCompleteCard } from "@/components/brief-complete-card";
 import { MissionMapCard } from "@/components/mission-map-card";
+import { BuildProgress } from "@/components/build-progress";
+import { GameSelector } from "@/components/game-selector";
+import { GameWrapper } from "@/components/game-wrapper";
 import type { MissionMapData } from "@/components/mission-map-card";
+import type { GameChoice } from "@/components/game-selector";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -35,6 +39,21 @@ export function ChatArea({
   const hasSetTitle = useRef<Set<string>>(new Set());
   const [missionMap, setMissionMap] = useState<MissionMapData | null>(null);
 
+  // Build state
+  const [isBuilding, setIsBuilding] = useState(false);
+  const [buildComplete, setBuildComplete] = useState(false);
+  const [activeMissionIdx, setActiveMissionIdx] = useState(0);
+  const [activeBlockIdx, setActiveBlockIdx] = useState(0);
+  const [currentTask, setCurrentTask] = useState("");
+  const [buildLogs, setBuildLogs] = useState<string[]>([]);
+  const buildStartTime = useRef<number>(0);
+
+  // Game state
+  const [showGameSelector, setShowGameSelector] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<GameChoice | null>(null);
+  const [gameDismissed, setGameDismissed] = useState(false);
+  const gameSelectorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Compute brief progress based on message count
   const briefProgress = useMemo(() => {
     const count = messages.length;
@@ -52,12 +71,22 @@ export function ChatArea({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, missionMap]);
+  }, [messages, missionMap, isBuilding, selectedGame, showGameSelector]);
 
   // Clear messages when switching conversations
   useEffect(() => {
     setMessages([]);
     setMissionMap(null);
+    setIsBuilding(false);
+    setBuildComplete(false);
+    setActiveMissionIdx(0);
+    setActiveBlockIdx(0);
+    setCurrentTask("");
+    setBuildLogs([]);
+    setShowGameSelector(false);
+    setSelectedGame(null);
+    setGameDismissed(false);
+    if (gameSelectorTimerRef.current) clearTimeout(gameSelectorTimerRef.current);
   }, [conversationId, setMessages]);
 
   // Auto-title: set conversation title from first user message
@@ -100,6 +129,80 @@ export function ChatArea({
     }
   }, [messages]);
 
+  // Simulate build progress when building starts
+  useEffect(() => {
+    if (!isBuilding || !missionMap || buildComplete) return;
+
+    const missions = missionMap.missions;
+    let mIdx = 0;
+    let bIdx = 0;
+
+    const TASK_LABELS = [
+      "Setting up project structure...",
+      "Installing dependencies...",
+      "Building component scaffolds...",
+      "Writing business logic...",
+      "Connecting data layer...",
+      "Running type checks...",
+      "Generating API routes...",
+      "Wiring up the UI...",
+      "Optimizing bundle...",
+      "Running integration tests...",
+    ];
+
+    let logCount = 0;
+    const interval = setInterval(() => {
+      if (mIdx >= missions.length) {
+        setBuildComplete(true);
+        clearInterval(interval);
+        return;
+      }
+
+      const mission = missions[mIdx];
+      const totalBlocks = mission.blocks.length;
+
+      // Advance block
+      bIdx++;
+      if (bIdx >= totalBlocks) {
+        bIdx = 0;
+        mIdx++;
+        setActiveMissionIdx(mIdx);
+        if (mIdx < missions.length) {
+          setBuildLogs((prev) => [...prev, `--- Mission ${mIdx + 1}: ${missions[mIdx].name} ---`]);
+        }
+      }
+      setActiveBlockIdx(bIdx);
+
+      // Cycle through task labels
+      const taskLabel = mIdx < missions.length
+        ? `${missions[mIdx].blocks[bIdx]?.name || "Processing"}...`
+        : "Finalizing...";
+      setCurrentTask(taskLabel);
+
+      // Add log line
+      logCount++;
+      const logLine = TASK_LABELS[logCount % TASK_LABELS.length];
+      setBuildLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${logLine}`]);
+    }, 2000 + Math.random() * 1500);
+
+    return () => clearInterval(interval);
+  }, [isBuilding, missionMap, buildComplete]);
+
+  // Show game selector 3 seconds after build starts
+  useEffect(() => {
+    if (isBuilding && !gameDismissed && !selectedGame) {
+      gameSelectorTimerRef.current = setTimeout(() => {
+        setShowGameSelector(true);
+      }, 3000);
+      return () => {
+        if (gameSelectorTimerRef.current) clearTimeout(gameSelectorTimerRef.current);
+      };
+    }
+  }, [isBuilding, gameDismissed, selectedGame]);
+
+  // Pause game when system is sending messages (isLoading with assistant response)
+  const isGamePaused = isLoading && messages[messages.length - 1]?.role === "assistant";
+
   const handleCompile = useCallback(async () => {
     try {
       const res = await fetch("/api/chat", {
@@ -121,7 +224,6 @@ export function ChatArea({
 
   const handleStartBuilding = useCallback(() => {
     // Emit a user message to kick off the build
-    // For now, this is a placeholder — the backend will handle the actual build
     const fakeEvent = {
       preventDefault: () => {},
     } as React.FormEvent;
@@ -137,12 +239,42 @@ export function ChatArea({
       },
     ]);
 
+    // Start the build progress UI
+    setIsBuilding(true);
+    setBuildComplete(false);
+    setActiveMissionIdx(0);
+    setActiveBlockIdx(0);
+    setCurrentTask("Initializing build pipeline...");
+    setBuildLogs(["[" + new Date().toLocaleTimeString() + "] Build started"]);
+    buildStartTime.current = Date.now();
+
     handleSubmit(fakeEvent);
   }, [messages, setMessages, handleSubmit]);
 
   const handleModify = useCallback(() => {
     // Clear the mission map so user can keep chatting
     setMissionMap(null);
+  }, []);
+
+  const handleGameSelect = useCallback((game: GameChoice) => {
+    setSelectedGame(game);
+    setShowGameSelector(false);
+  }, []);
+
+  const handleGameDismiss = useCallback(() => {
+    setShowGameSelector(false);
+    setGameDismissed(true);
+  }, []);
+
+  const handleSwitchGame = useCallback(() => {
+    setSelectedGame(null);
+    setShowGameSelector(true);
+  }, []);
+
+  const handleCloseGame = useCallback(() => {
+    setSelectedGame(null);
+    setGameDismissed(true);
+    setShowGameSelector(false);
   }, []);
 
   function onSubmit(e: React.FormEvent) {
@@ -262,7 +394,7 @@ export function ChatArea({
               )}
 
             {/* Brief complete card — shows inline mission map when available */}
-            {isBriefComplete && !isLoading && (
+            {isBriefComplete && !isLoading && !isBuilding && (
               <BriefCompleteCard
                 messages={messages}
                 missionMap={missionMap}
@@ -273,12 +405,58 @@ export function ChatArea({
             )}
 
             {/* Standalone mission map for data injected via message parsing */}
-            {!isBriefComplete && missionMap && (
+            {!isBriefComplete && missionMap && !isBuilding && (
               <MissionMapCard
                 data={missionMap}
                 onStartBuilding={handleStartBuilding}
                 onModify={handleModify}
               />
+            )}
+
+            {/* Build Progress UI */}
+            {isBuilding && missionMap && (
+              <BuildProgress
+                missionMap={missionMap}
+                activeMissionIdx={activeMissionIdx}
+                activeBlockIdx={activeBlockIdx}
+                currentTask={currentTask}
+                logs={buildLogs}
+                buildComplete={buildComplete}
+              />
+            )}
+
+            {/* Game selector — appears 3s after build starts */}
+            {isBuilding && showGameSelector && !selectedGame && (
+              <GameSelector
+                onSelect={handleGameSelect}
+                onDismiss={handleGameDismiss}
+              />
+            )}
+
+            {/* Game wrapper — shows the selected game */}
+            {isBuilding && selectedGame && (
+              <GameWrapper
+                game={selectedGame}
+                paused={isGamePaused}
+                buildComplete={buildComplete}
+                onSwitchGame={handleSwitchGame}
+                onClose={handleCloseGame}
+              />
+            )}
+
+            {/* Build complete card */}
+            {buildComplete && (
+              <div className="mx-auto max-w-2xl my-4 build-complete-glow">
+                <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-b from-emerald-500/5 to-transparent p-5 text-center">
+                  <svg className="h-10 w-10 mx-auto text-emerald-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-emerald-400 mb-1">Your agent is ready!</h3>
+                  <p className="text-xs text-lens-muted">
+                    All {missionMap?.missions.length} missions completed successfully.
+                  </p>
+                </div>
+              </div>
             )}
           </div>
         )}
