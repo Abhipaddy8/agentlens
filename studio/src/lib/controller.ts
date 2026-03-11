@@ -18,11 +18,22 @@ import {
   BriefFieldKey,
 } from "./types";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAI() {
+  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+  const baseURL = process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || undefined;
+  const isOpenRouter = baseURL?.includes("openrouter");
+  return new OpenAI({
+    apiKey,
+    baseURL,
+    defaultHeaders: isOpenRouter
+      ? { "HTTP-Referer": "https://agentlens.dev", "X-Title": "AgentLens Studio" }
+      : undefined,
+  });
+}
 
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+function getModel() {
+  return process.env.LLM_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini";
+}
 
 /** Empty brief state. */
 function emptyBriefState(): BriefState {
@@ -77,8 +88,8 @@ ${conversationText}
 Respond with ONLY valid JSON, no markdown fences.`;
 
     try {
-      const response = await openai.chat.completions.create({
-        model: MODEL,
+      const response = await getOpenAI().chat.completions.create({
+        model: getModel(),
         messages: [{ role: "user", content: extractionPrompt }],
         temperature: 0,
         max_tokens: 500,
@@ -334,8 +345,8 @@ RULES:
         })),
     ];
 
-    const stream = await openai.chat.completions.create({
-      model: MODEL,
+    const stream = await getOpenAI().chat.completions.create({
+      model: getModel(),
       messages: apiMessages,
       temperature: 0.7,
       max_tokens: 500,

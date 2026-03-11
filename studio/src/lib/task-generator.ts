@@ -9,11 +9,18 @@ import OpenAI from "openai";
 import { ParsedBrief } from "./brief-compiler";
 import { Mission, MissionMap } from "./mission-architect";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+function getOpenAI() {
+  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
+  const baseURL = process.env.LLM_BASE_URL || process.env.OPENAI_BASE_URL || undefined;
+  return new OpenAI({
+    apiKey,
+    baseURL,
+    defaultHeaders: baseURL?.includes("openrouter")
+      ? { "HTTP-Referer": "https://agentlens.dev", "X-Title": "AgentLens Studio" }
+      : undefined,
+  });
+}
+function getModel() { return process.env.LLM_MODEL || process.env.OPENAI_MODEL || "gpt-4o-mini"; }
 
 /**
  * Generate 3-8 specific tasks for a single mission.
@@ -55,8 +62,8 @@ Trigger: ${brief.trigger}
 Output: ${brief.output}`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: MODEL,
+    const response = await getOpenAI().chat.completions.create({
+      model: getModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

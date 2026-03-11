@@ -73,7 +73,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Check for API key
-  if (!process.env.OPENAI_API_KEY) {
+  const hasApiKey = !!(process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY);
+  if (!hasApiKey) {
     return fallbackMockResponse(messages);
   }
 
