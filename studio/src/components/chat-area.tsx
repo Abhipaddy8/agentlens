@@ -60,6 +60,7 @@ export function ChatArea({
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasSetTitle = useRef<Set<string>>(new Set());
   const [missionMap, setMissionMap] = useState<MissionMapData | null>(null);
+  const [compilePhase, setCompilePhase] = useState<string | null>(null);
 
   // Build state
   const [isBuilding, setIsBuilding] = useState(false);
@@ -97,15 +98,21 @@ export function ChatArea({
   const [gameDismissed, setGameDismissed] = useState(false);
   const gameSelectorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Compute brief progress based on message count
+  // Compute brief progress based on message count + content signals
   const briefProgress = useMemo(() => {
     const count = messages.length;
+    // Check if assistant confirmed all details and is ready to build
+    const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
+    const content = lastAssistant?.content?.toLowerCase() || "";
+    const confirmSignals = ["would you like to adjust", "before i generate", "ready to build", "shall i proceed", "start building", "i'll get started", "i'll proceed", "get right to it", "i will now proceed"];
+    const isConfirmed = confirmSignals.some(s => content.includes(s));
+    if (isConfirmed && count >= 2) return 100;
     if (count >= 8) return 100;
     if (count >= 6) return 75;
     if (count >= 4) return 50;
     if (count >= 2) return 25;
     return 0;
-  }, [messages.length]);
+  }, [messages]);
 
   const isBriefComplete = briefProgress === 100;
 
@@ -413,20 +420,49 @@ export function ChatArea({
 
   const handleCompile = useCallback(async () => {
     try {
+      setCompilePhase("compiling");
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "compile", messages }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.missionMap) {
-          setMissionMap(data.missionMap);
+      if (!res.ok || !res.body) return;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("2:")) {
+            try {
+              const events = JSON.parse(line.slice(2));
+              for (const evt of events) {
+                if (evt.type === "compile-phase") {
+                  setCompilePhase(evt.phase);
+                }
+                if (evt.type === "mission-map") {
+                  setMissionMap(evt.missionMap);
+                  setCompilePhase(null);
+                }
+                if (evt.type === "mission-map-draft") {
+                  setMissionMap(evt.missionMap);
+                }
+              }
+            } catch { /* skip parse errors */ }
+          }
         }
       }
     } catch {
-      // Silently handle
+      setCompilePhase(null);
     }
   }, [messages]);
 

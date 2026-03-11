@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { MissionMapCard } from "@/components/mission-map-card";
 import type { MissionMapData } from "@/components/mission-map-card";
 
 interface BriefCompleteCardProps {
   messages: Array<{ role: string; content: string }>;
   missionMap?: MissionMapData | null;
-  onCompile?: () => void;
+  onCompile?: () => void | Promise<void>;
   onStartBuilding?: () => void;
   onModify?: () => void;
 }
@@ -39,15 +39,22 @@ export function BriefCompleteCard({
     return items.slice(0, 5);
   }, [messages]);
 
+  // Clear compiling state when external mission map arrives
+  useEffect(() => {
+    if (externalMissionMap) setIsCompiling(false);
+  }, [externalMissionMap]);
+
   const handleCompile = useCallback(async () => {
     setIsCompiling(true);
 
     if (onCompile) {
-      onCompile();
+      // Parent handles the streaming compile — isCompiling clears when missionMap arrives
+      await onCompile();
+      setIsCompiling(false);
       return;
     }
 
-    // Default: call the compile API
+    // Fallback: call compile API with SSE stream parsing
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -55,14 +62,33 @@ export function BriefCompleteCard({
         body: JSON.stringify({ action: "compile", messages }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.missionMap) {
-          setInternalMissionMap(data.missionMap);
+      if (!res.ok || !res.body) return;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() || "";
+        for (const line of lines) {
+          if (line.startsWith("2:")) {
+            try {
+              const events = JSON.parse(line.slice(2));
+              for (const evt of events) {
+                if (evt.type === "mission-map") {
+                  setInternalMissionMap(evt.missionMap);
+                }
+              }
+            } catch { /* skip */ }
+          }
         }
       }
     } catch {
-      // Silently handle — user can retry
+      // Silently handle
     } finally {
       setIsCompiling(false);
     }

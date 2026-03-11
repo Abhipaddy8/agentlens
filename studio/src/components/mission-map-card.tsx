@@ -8,16 +8,23 @@ export interface MissionBlock {
 }
 
 export interface Mission {
-  number: number;
+  number?: number;
+  id?: number;
   name: string;
-  goal: string;
-  type: MissionType;
-  blocks: MissionBlock[];
+  goal?: string;
+  description?: string;
+  type?: MissionType;
+  missionType?: string;
+  blocks?: MissionBlock[];
+  pipelineBlocks?: string[];
+  tasks?: string[];
 }
 
 export interface MissionMapData {
   projectName: string;
-  description: string;
+  description?: string;
+  totalMissions?: number;
+  complexity?: string;
   missions: Mission[];
 }
 
@@ -72,14 +79,14 @@ export function MissionMapCard({ data, onStartBuilding, onModify }: MissionMapCa
         <div className="space-y-3 mb-5">
           {data.missions.map((mission, idx) => (
             <div
-              key={mission.number}
+              key={(mission.number || mission.id || idx + 1)}
               className="rounded-lg border border-lens-border/60 bg-lens-surface/80 p-3 mission-map-item"
               style={{ animationDelay: `${idx * 80}ms` }}
             >
               {/* Mission header */}
               <div className="flex items-baseline gap-2 mb-1.5">
                 <span className="text-[11px] font-bold text-lens-accent tabular-nums">
-                  M{mission.number}
+                  M{(mission.number || mission.id || idx + 1)}
                 </span>
                 <span className="text-sm font-medium text-lens-text">
                   {mission.name}
@@ -87,18 +94,20 @@ export function MissionMapCard({ data, onStartBuilding, onModify }: MissionMapCa
               </div>
 
               {/* Goal */}
-              <p className="text-xs text-lens-muted mb-2 leading-relaxed">
-                {mission.goal}
-              </p>
+              {(mission.goal || mission.description) && (
+                <p className="text-xs text-lens-muted mb-2 leading-relaxed">
+                  {mission.goal || mission.description}
+                </p>
+              )}
 
               {/* Pipeline blocks */}
               <div className="flex flex-wrap items-center gap-y-1.5">
-                {mission.blocks.map((block, blockIdx) => (
+                {(mission.blocks || (mission.pipelineBlocks || []).map(name => ({ name }))).map((block, blockIdx, arr) => (
                   <PipelineBlock
                     key={blockIdx}
-                    name={block.name}
-                    type={mission.type}
-                    isLast={blockIdx === mission.blocks.length - 1}
+                    name={typeof block === "string" ? block : block.name}
+                    type={(mission.type || mission.missionType || "core-loop") as MissionType}
+                    isLast={blockIdx === arr.length - 1}
                   />
                 ))}
               </div>
