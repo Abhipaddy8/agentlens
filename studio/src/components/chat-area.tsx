@@ -19,6 +19,12 @@ import { RollbackNotification } from "@/components/rollback-notification";
 import { ActivityFeed } from "@/components/activity-feed";
 import { MemoryDisplay } from "@/components/memory-display";
 import { QueryRoutingViz } from "@/components/query-routing-viz";
+import { ApprovalRequest } from "@/components/approval-request";
+import { AutonomyConfig } from "@/components/autonomy-config";
+import { ApprovalHistory } from "@/components/approval-history";
+import type { ApprovalRequestData } from "@/components/approval-request";
+import type { AutonomyConfigData } from "@/components/autonomy-config";
+import type { ApprovalHistoryData } from "@/components/approval-history";
 import type { IntegrationPromptData } from "@/components/integration-prompt";
 import type { DeployProgressData } from "@/components/deploy-progress";
 import type { DeployCompleteData } from "@/components/deploy-card";
@@ -80,6 +86,11 @@ export function ChatArea({
   const [memoryData, setMemoryData] = useState<MemoryDisplayData | null>(null);
   const [routingData, setRoutingData] = useState<RoutingVizData | null>(null);
 
+  // Approval / autonomy state
+  const [approvalRequests, setApprovalRequests] = useState<ApprovalRequestData[]>([]);
+  const [autonomyConfigData, setAutonomyConfigData] = useState<AutonomyConfigData | null>(null);
+  const [approvalHistoryData, setApprovalHistoryData] = useState<ApprovalHistoryData | null>(null);
+
   // Game state
   const [showGameSelector, setShowGameSelector] = useState(false);
   const [selectedGame, setSelectedGame] = useState<GameChoice | null>(null);
@@ -103,7 +114,7 @@ export function ChatArea({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, missionMap, isBuilding, selectedGame, showGameSelector, activityFeedData, memoryData, routingData]);
+  }, [messages, missionMap, isBuilding, selectedGame, showGameSelector, activityFeedData, memoryData, routingData, approvalRequests, autonomyConfigData, approvalHistoryData]);
 
   // Clear messages when switching conversations
   useEffect(() => {
@@ -126,6 +137,9 @@ export function ChatArea({
     setActivityFeedData(null);
     setMemoryData(null);
     setRoutingData(null);
+    setApprovalRequests([]);
+    setAutonomyConfigData(null);
+    setApprovalHistoryData(null);
     if (gameSelectorTimerRef.current) clearTimeout(gameSelectorTimerRef.current);
   }, [conversationId, setMessages]);
 
@@ -244,8 +258,9 @@ export function ChatArea({
     }
   }, [messages]);
 
-  // Parse activity-feed, memory-display, routing-viz data events from assistant messages
+  // Parse activity-feed, memory-display, routing-viz, approval data events from assistant messages
   useEffect(() => {
+    const collectedApprovals: ApprovalRequestData[] = [];
     for (const msg of messages) {
       if (msg.role !== "assistant") continue;
 
@@ -282,6 +297,43 @@ export function ChatArea({
           }
         } catch { /* skip */ }
       }
+
+      // Approval requests
+      const approvalRegex = /<!-- APPROVAL_REQUEST_START -->([\s\S]*?)<!-- APPROVAL_REQUEST_END -->/g;
+      while ((match = approvalRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as ApprovalRequestData;
+          if (parsed.type === "approval-request") {
+            collectedApprovals.push(parsed);
+          }
+        } catch { /* skip */ }
+      }
+
+      // Autonomy config
+      const autonomyRegex = /<!-- AUTONOMY_CONFIG_START -->([\s\S]*?)<!-- AUTONOMY_CONFIG_END -->/g;
+      while ((match = autonomyRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as AutonomyConfigData;
+          if (parsed.type === "autonomy-config") {
+            setAutonomyConfigData(parsed);
+          }
+        } catch { /* skip */ }
+      }
+
+      // Approval history
+      const historyRegex = /<!-- APPROVAL_HISTORY_START -->([\s\S]*?)<!-- APPROVAL_HISTORY_END -->/g;
+      while ((match = historyRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as ApprovalHistoryData;
+          if (parsed.type === "approval-history") {
+            setApprovalHistoryData(parsed);
+          }
+        } catch { /* skip */ }
+      }
+    }
+
+    if (collectedApprovals.length > 0) {
+      setApprovalRequests(collectedApprovals);
     }
   }, [messages]);
 
@@ -431,6 +483,55 @@ export function ChatArea({
     setSelectedGame(null);
     setGameDismissed(true);
     setShowGameSelector(false);
+  }, []);
+
+  const handleApprove = useCallback(async (requestId: string, note?: string) => {
+    // Optimistic update
+    setApprovalRequests((prev) =>
+      prev.map((r) => (r.requestId === requestId ? { ...r, status: "approved" as const } : r))
+    );
+    try {
+      const req = approvalRequests.find((r) => r.requestId === requestId);
+      if (req) {
+        await fetch(`/api/agents/${req.agentId}/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId, decision: "approved", note }),
+        });
+      }
+    } catch {
+      // Silently handle
+    }
+  }, [approvalRequests]);
+
+  const handleDeny = useCallback(async (requestId: string, reason?: string) => {
+    setApprovalRequests((prev) =>
+      prev.map((r) => (r.requestId === requestId ? { ...r, status: "denied" as const } : r))
+    );
+    try {
+      const req = approvalRequests.find((r) => r.requestId === requestId);
+      if (req) {
+        await fetch(`/api/agents/${req.agentId}/approve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId, decision: "denied", reason }),
+        });
+      }
+    } catch {
+      // Silently handle
+    }
+  }, [approvalRequests]);
+
+  const handleAutonomySave = useCallback(async (agentId: string, config: { actions: Array<{ name: string; label: string; requiresApproval: boolean; threshold?: number }>; trustLevel: number }) => {
+    try {
+      await fetch(`/api/agents/${agentId}/autonomy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+    } catch {
+      // Silently handle
+    }
   }, []);
 
   const handleDeploy = useCallback(() => {
@@ -684,6 +785,29 @@ export function ChatArea({
             {/* Query routing visualization — shown on demand ("show routing decisions") */}
             {routingData && (
               <QueryRoutingViz decisions={routingData.decisions} />
+            )}
+
+            {/* Approval requests — inline cards for human-in-the-loop */}
+            {approvalRequests.map((req) => (
+              <ApprovalRequest
+                key={req.requestId}
+                data={req}
+                onApprove={handleApprove}
+                onDeny={handleDeny}
+              />
+            ))}
+
+            {/* Autonomy configuration — shown on "configure approvals" */}
+            {autonomyConfigData && (
+              <AutonomyConfig
+                data={autonomyConfigData}
+                onSave={handleAutonomySave}
+              />
+            )}
+
+            {/* Approval history — past decisions list */}
+            {approvalHistoryData && (
+              <ApprovalHistory data={approvalHistoryData} />
             )}
           </div>
         )}

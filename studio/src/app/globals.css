@@ -338,4 +338,95 @@
     opacity: 0;
     animation: routing-row-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
+
+  /* ── Approval Request ────────────────────────────────────────────── */
+
+  .approval-request-card {
+    animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Pulsing amber border for waiting approval */
+  @keyframes approval-waiting-pulse {
+    0%, 100% { border-color: rgba(245, 158, 11, 0.3); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    50% { border-color: rgba(245, 158, 11, 0.6); box-shadow: 0 0 16px 2px rgba(245, 158, 11, 0.1); }
+  }
+
+  .approval-waiting-border {
+    animation: approval-waiting-pulse 2s ease-in-out infinite;
+  }
+
+  /* Green flash for approved */
+  @keyframes approval-approved-flash {
+    0% { border-color: rgba(16, 185, 129, 0.8); box-shadow: 0 0 20px 4px rgba(16, 185, 129, 0.2); }
+    100% { border-color: rgba(16, 185, 129, 0.3); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  }
+
+  .approval-approved-flash {
+    animation: approval-approved-flash 1s ease-out forwards;
+  }
+
+  /* Red flash for denied */
+  @keyframes approval-denied-flash {
+    0% { border-color: rgba(239, 68, 68, 0.8); box-shadow: 0 0 20px 4px rgba(239, 68, 68, 0.2); }
+    100% { border-color: rgba(239, 68, 68, 0.3); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  }
+
+  .approval-denied-flash {
+    animation: approval-denied-flash 1s ease-out forwards;
+  }
+
+  /* ── Autonomy Config ─────────────────────────────────────────────── */
+
+  .autonomy-config-card {
+    animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Autonomy slider styling */
+  .autonomy-slider {
+    background: linear-gradient(90deg, #f59e0b 0%, #6366f1 50%, #10b981 100%);
+  }
+
+  .autonomy-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #3f3f46;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .autonomy-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid #3f3f46;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  /* ── Approval History ────────────────────────────────────────────── */
+
+  .approval-history-card {
+    animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes approval-history-row-enter {
+    from {
+      opacity: 0;
+      transform: translateX(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .approval-history-row {
+    opacity: 0;
+    animation: approval-history-row-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
 }

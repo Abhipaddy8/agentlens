@@ -13,6 +13,8 @@ import { recordDeployment, rollback as rollbackAgent, getActiveVersion, getPrevi
 import { getActivityFeed } from "@/lib/activity-feed";
 import { getMemories, getRecentLearnings } from "@/lib/memory-manager";
 import { getRoutingDecisions, getRoutingStats } from "@/lib/routing-tracker";
+import { listApprovals, getApprovalHistory, createApprovalRequest } from "@/lib/approval-manager";
+import { getAutonomyConfig } from "@/lib/autonomy-config";
 
 /**
  * POST /api/chat
@@ -163,6 +165,76 @@ export async function POST(req: NextRequest) {
               streamController.enqueue(
                 encoder.encode(
                   `2:${JSON.stringify([{ type: "routing-viz", decisions, stats }])}\n`
+                )
+              );
+            } catch {
+              // Non-critical
+            }
+          }
+
+          // Detect approval/autonomy queries
+          const approvalKeywords = ["what needs my approval", "pending approvals", "show approvals", "approval requests", "waiting for approval"];
+          const approvalHistoryKeywords = ["approval history", "show approval history", "past approvals", "approval log"];
+          const autonomyKeywords = ["configure approvals", "approval settings", "autonomy settings", "trust level", "autonomy config"];
+
+          if (approvalKeywords.some((kw) => lastUserMsg.includes(kw))) {
+            try {
+              const agentId = "opera-crm-monitor";
+              const pending = await listApprovals(agentId, "waiting");
+              const all = await listApprovals(agentId);
+              streamController.enqueue(
+                encoder.encode(
+                  `2:${JSON.stringify([{ type: "approval-list", pending, all }])}\n`
+                )
+              );
+            } catch {
+              // Non-critical
+            }
+          }
+
+          if (approvalHistoryKeywords.some((kw) => lastUserMsg.includes(kw))) {
+            try {
+              const agentId = "opera-crm-monitor";
+              const history = await getApprovalHistory(agentId);
+              streamController.enqueue(
+                encoder.encode(
+                  `2:${JSON.stringify([{ type: "approval-history", history }])}\n`
+                )
+              );
+            } catch {
+              // Non-critical
+            }
+          }
+
+          if (autonomyKeywords.some((kw) => lastUserMsg.includes(kw))) {
+            try {
+              const agentId = "opera-crm-monitor";
+              const config = await getAutonomyConfig(agentId);
+              streamController.enqueue(
+                encoder.encode(
+                  `2:${JSON.stringify([{ type: "autonomy-config", config }])}\n`
+                )
+              );
+            } catch {
+              // Non-critical
+            }
+          }
+
+          // Simulate agent hitting a decision point — emit approval request for demo
+          const decisionPointKeywords = ["run the agent", "execute now", "start the agent", "trigger the agent"];
+          if (decisionPointKeywords.some((kw) => lastUserMsg.includes(kw))) {
+            try {
+              const agentId = "opera-crm-monitor";
+              const request = await createApprovalRequest(
+                agentId,
+                "Send follow-up sequence to 23 contacts who opened but didn't reply?",
+                "23 contacts opened the quarterly report email but didn't reply within 7 days. The agent wants to send a shorter follow-up with a direct CTA. Estimated cost: $0.92 via SendGrid.",
+                "in-app",
+                7200
+              );
+              streamController.enqueue(
+                encoder.encode(
+                  `2:${JSON.stringify([{ type: "approval-request", request }])}\n`
                 )
               );
             } catch {

@@ -182,6 +182,39 @@ export interface RoutingDecision {
   fallbackUsed?: boolean;
 }
 
+// --- Human-in-the-Loop Types ---
+
+export interface ApprovalRequest {
+  requestId: string;
+  agentId: string;
+  agentName: string;
+  question: string;
+  context: string;
+  channel: "slack" | "whatsapp" | "in-app";
+  timeoutSeconds: number;
+  status: "waiting" | "approved" | "denied" | "expired";
+  createdAt: string;
+  respondedAt?: string;
+  decision?: "approved" | "denied";
+  note?: string;
+  decidedBy?: string;
+}
+
+export interface AutonomyConfig {
+  actions: { name: string; label: string; requiresApproval: boolean; threshold?: number }[];
+  trustLevel: number;
+}
+
+export interface ApprovalHistoryEntry {
+  requestId: string;
+  action: string;
+  decision: "approved" | "denied" | "expired";
+  responseTimeMs: number;
+  decidedBy: string;
+  timestamp: string;
+  note?: string;
+}
+
 /** Field definition for the controller's tracking logic. */
 export interface FieldDefinition {
   key: BriefFieldKey;
