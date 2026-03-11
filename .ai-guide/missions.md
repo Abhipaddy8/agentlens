@@ -4,7 +4,7 @@
 **Intent**: build → ship → client-ready → live demo → outreach → platform
 **Total Missions**: 28
 **Architecture Bible**: TechStack Tetris Mission Reference (30 missions, 6 worlds, 165 code steps) — pipeline blocks pattern, progressive complexity, crash recovery, safe rollout, query routing all absorbed into Phase 5.
-**Current**: Mission 27 — Human-in-the-Loop
+**Current**: Mission 28 — Agency Multi-Tenant
 
 ---
 
@@ -186,6 +186,6 @@ Three parallel agents per mission. Each runs in an isolated worktree. No file ov
 
 - ✅ **26 — Activity Feed + Memory + Query Routing** — Plain English run summaries inline in chat. "Ran at 9am, checked 47 deals, found 3 stale, sent Slack summary. Cost: $0.03." No logs, no JSON. Memory system: 4 DynamoDB tables — `agent_memory_long` (persists forever, importance scored), `agent_memory_short` (current run, cleared on completion), `agent_memory_shared` (account-level, readable by all agents), `agent_sessions` (run archive, plain English). Session start injects top 10 memories. Session end consolidates. User sees "it remembered" — never sees the infra. **Query routing layer** (TechStack Tetris 3-2 pattern): built agents get intelligent routing — query classifier decides whether to search the web, query a DB, pull from documents, or call an API. Not hardcoded tool chains. Agent decides the right data source per query. Pipeline blocks: Query Classifier → Tool Selector → Data Source Router → Confidence Gate.
 
-- ▶ **27 — Human-in-the-Loop** — Agent pauses at decision points. Sends question to Slack or WhatsApp. Human responds. Agent continues. Configurable per action: which actions need approval vs run autonomously. Trust widens over time as user grants more autonomy. Non-technical clients stay in control without watching every run.
+- ✅ **27 — Human-in-the-Loop** — Agent pauses at decision points. Sends question to Slack or WhatsApp. Human responds. Agent continues. Configurable per action: which actions need approval vs run autonomously. Trust widens over time as user grants more autonomy. Non-technical clients stay in control without watching every run.
 
-- 🔒 **28 — Agency Multi-Tenant** — One account, multiple client environments. Agency owner sees all agents across all clients in a single dashboard. Each client's agents are isolated (separate memory, separate budgets). Billing rolls up to the agency. Agency plan: up to 10 agents at $299/month.
+- ▶ **28 — Agency Multi-Tenant** — One account, multiple client environments. Agency owner sees all agents across all clients in a single dashboard. Each client's agents are isolated (separate memory, separate budgets). Billing rolls up to the agency. Agency plan: up to 10 agents at $299/month.
