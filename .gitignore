@@ -28,3 +28,4 @@ coverage/
 
 # NPC Guide sessions (internal)
 .ai-guide/sessions/
+.vercel

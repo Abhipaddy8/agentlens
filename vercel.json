@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "buildCommand": "cd dashboard && REACT_APP_API_BASE= DISABLE_ESLINT_PLUGIN=true npm run build",
+  "installCommand": "cd dashboard && npm install",
+  "outputDirectory": "dashboard/build",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/handler" },
+    { "source": "/v1/:path*", "destination": "/api/handler" },
+    { "source": "/health", "destination": "/api/handler" }
+  ]
+}

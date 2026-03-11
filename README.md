@@ -2,7 +2,7 @@
 
 **The proxy that sits between your AI agents and OpenAI. Logs every call. Caches duplicates. Downgrades models when the task is simple. Kills runaway agents instantly. Deploys in your AWS account — your data never leaves.**
 
-[![Deploy to AWS](https://img.shields.io/badge/Deploy%20to%20AWS-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)](LAUNCH_STACK_URL_PLACEHOLDER)
+[![Deploy to AWS](https://img.shields.io/badge/Deploy%20to%20AWS-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)](https://console.aws.amazon.com/cloudformation/home#/stacks/create/review?templateURL=https%3A%2F%2Fagentlens-artifacts.s3.amazonaws.com%2Fagentlens%2Fcloudformation.yaml&stackName=agentlens&param_ArtifactBucket=agentlens-artifacts) [![Try Live Demo](https://img.shields.io/badge/Try%20Live%20Demo-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://agentlens-demo.vercel.app)
 
 ---
 
