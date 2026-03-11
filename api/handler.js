@@ -62,6 +62,40 @@ const SEED_DATA = {
       savingsPercent: 12.9
     }
   },
+  anomalies: [
+    {
+      timestamp: "2026-03-05T14:22:00Z",
+      rule: "loop_detected",
+      agentId: "supplier-validator",
+      details: "420 calls in 3 hours to gpt-4o — repeated identical prompt detected. Validation loop on Supplier #4471.",
+      action: "frozen",
+      status: "resolved"
+    },
+    {
+      timestamp: "2026-03-08T09:15:00Z",
+      rule: "spend_spike",
+      agentId: "procurement-agent",
+      details: "Spend rate 4.2x above 7-day average. $6.80 in last hour vs $1.62 norm.",
+      action: "alert_only",
+      status: "resolved"
+    },
+    {
+      timestamp: "2026-03-09T16:40:00Z",
+      rule: "budget_warning",
+      agentId: "inventory-forecaster",
+      details: "Agent at 87% of $10.00 monthly budget with 21 days remaining.",
+      action: "alert_only",
+      status: "active"
+    },
+    {
+      timestamp: "2026-03-10T03:05:00Z",
+      rule: "concentration",
+      agentId: "procurement-agent",
+      details: "Single agent accounts for 42% of total LLM spend. Review routing opportunities.",
+      action: "alert_only",
+      status: "active"
+    }
+  ],
   meta: {
     company: "OperaERP",
     description: "Mid-size manufacturing company - 6 AI agents, 3 weeks of data",

@@ -20,6 +20,14 @@ Parameters:
     Default: 24
     Description: Cache time-to-live in hours
 
+  SlackWebhookUrl:
+    Type: String
+    Default: ''
+    Description: >
+      Optional Slack Incoming Webhook URL for anomaly alerts.
+      Leave blank to disable Slack notifications.
+      Create one at https://api.slack.com/messaging/webhooks
+
   ArtifactBucket:
     Type: String
     Description: S3 bucket containing the Lambda zip and dashboard build
@@ -134,6 +142,25 @@ Resources:
         - AttributeName: version
           KeyType: RANGE
 
+  AnomaliesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-anomalies'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: anomalyId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: anomalyId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
   # ==========================================
   # IAM Role for Lambda
   # ==========================================
@@ -179,6 +206,8 @@ Resources:
                   - !Sub '${AgentsTable.Arn}/index/*'
                   - !GetAtt PromptVersionsTable.Arn
                   - !Sub '${PromptVersionsTable.Arn}/index/*'
+                  - !GetAtt AnomaliesTable.Arn
+                  - !Sub '${AnomaliesTable.Arn}/index/*'
 
   # ==========================================
   # Lambda Function
@@ -234,6 +263,55 @@ Resources:
       Action: lambda:InvokeFunctionUrl
       Principal: '*'
       FunctionUrlAuthType: NONE
+
+  # ==========================================
+  # Anomaly Detection Worker
+  # ==========================================
+
+  AnomalyWorkerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-anomaly-worker'
+      Handler: anomaly-worker.handler
+      Runtime: nodejs20.x
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt ProxyFunctionRole.Arn
+      Code:
+        S3Bucket: !Ref ArtifactBucket
+        S3Key: !Ref LambdaZipKey
+      Environment:
+        Variables:
+          OPENAI_API_KEY: !Ref OpenAIApiKey
+          DEFAULT_RPM: !Ref DefaultRPM
+          CACHE_TTL_HOURS: !Ref CacheTTLHours
+          TABLE_CALLS: !Ref CallsTable
+          TABLE_BUDGETS: !Ref BudgetsTable
+          TABLE_CACHE: !Ref CacheTable
+          TABLE_CONTROLS: !Ref ControlsTable
+          TABLE_AGENTS: !Ref AgentsTable
+          TABLE_VERSIONS: !Ref PromptVersionsTable
+          ANOMALIES_TABLE: !Ref AnomaliesTable
+          SLACK_WEBHOOK_URL: !Ref SlackWebhookUrl
+
+  AnomalyScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub '${AWS::StackName}-anomaly-schedule'
+      Description: Triggers anomaly detection worker every 5 minutes
+      ScheduleExpression: 'rate(5 minutes)'
+      State: ENABLED
+      Targets:
+        - Id: AnomalyWorkerTarget
+          Arn: !GetAtt AnomalyWorkerFunction.Arn
+
+  AnomalySchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnomalyWorkerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AnomalyScheduleRule.Arn
 
   # ==========================================
   # API Gateway (HTTP API)
@@ -509,6 +587,14 @@ Outputs:
   DashboardBucketName:
     Description: S3 bucket for dashboard files
     Value: !Ref DashboardBucket
+
+  AnomalyWorkerArn:
+    Description: Anomaly detection worker Lambda ARN
+    Value: !GetAtt AnomalyWorkerFunction.Arn
+
+  AnomaliesTableName:
+    Description: DynamoDB table for anomaly records
+    Value: !Ref AnomaliesTable
 
   StackRegion:
     Description: AWS region where AgentLens is deployed

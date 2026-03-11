@@ -136,11 +136,38 @@ export default function Controls({ stats, apiBase, onRefresh }) {
     fontSize: 13,
   };
 
+  const anomalies = stats?.anomalies || [];
+
+  const ruleConfig = {
+    spend_spike:    { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)', icon: '▲', label: 'Spend Spike' },
+    loop_detected:  { color: '#ef4444', bg: 'rgba(239, 68, 68, 0.25)', icon: '⟳', label: 'Loop Detected' },
+    budget_warning: { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', icon: '⚠', label: 'Budget Warning' },
+    error_spike:    { color: '#eab308', bg: 'rgba(234, 179, 8, 0.15)',  icon: '✕', label: 'Error Spike' },
+    concentration:  { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)', icon: 'ℹ', label: 'Concentration' },
+  };
+
+  const actionBadge = (action) => {
+    if (action === 'frozen') return <span className="badge badge-red">FROZEN</span>;
+    if (action === 'downgraded') return <span className="badge badge-orange">DOWNGRADED</span>;
+    return <span className="badge badge-accent">ALERT ONLY</span>;
+  };
+
+  const statusBadge = (status) => {
+    if (status === 'active') return <span className="badge badge-red">ACTIVE</span>;
+    return <span className="badge badge-green">RESOLVED</span>;
+  };
+
+  const formatTime = (ts) => {
+    const d = new Date(ts);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+           d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>Controls</h1>
-        <p>Kill switches, budget limits, rate limits, and cache controls for every agent</p>
+        <p>Kill switches, budget limits, rate limits, cache controls, and anomaly alerts</p>
       </div>
 
       <div style={{ marginBottom: 24 }}>
@@ -253,6 +280,63 @@ export default function Controls({ stats, apiBase, onRefresh }) {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Anomaly Log */}
+      <div className="table-container">
+        <div className="table-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>⚡</span>
+          Anomaly Log
+          {anomalies.length > 0 && (
+            <span className="badge badge-red" style={{ marginLeft: 8 }}>{anomalies.length}</span>
+          )}
+        </div>
+        {anomalies.length > 0 ? (
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Rule</th>
+                <th>Agent</th>
+                <th>Details</th>
+                <th>Action</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {anomalies.slice(0, 10).map((a, i) => {
+                const rc = ruleConfig[a.rule] || ruleConfig.concentration;
+                return (
+                  <tr key={i}>
+                    <td style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: '#8888a0' }}>
+                      {formatTime(a.timestamp)}
+                    </td>
+                    <td>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '3px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600,
+                        background: rc.bg, color: rc.color,
+                      }}>
+                        <span style={{ fontSize: 14 }}>{rc.icon}</span>
+                        {rc.label}
+                      </span>
+                    </td>
+                    <td><strong>{a.agentId}</strong></td>
+                    <td style={{ fontSize: 13, color: '#c0c0d0', maxWidth: 280 }}>{a.details || '—'}</td>
+                    <td>{actionBadge(a.action)}</td>
+                    <td>{statusBadge(a.status)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#22c55e' }}>
+            <span style={{ fontSize: 32, display: 'block', marginBottom: 8 }}>✓</span>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>No anomalies detected</span>
+            <p style={{ color: '#8888a0', fontSize: 13, marginTop: 4 }}>All agents operating within normal parameters</p>
+          </div>
+        )}
       </div>
     </div>
   );
