@@ -1,9 +1,12 @@
 "use client";
 
 import { useChat } from "ai/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatInput } from "@/components/chat-input";
+import { ThinkingIndicator } from "@/components/thinking-indicator";
+import { BriefProgress } from "@/components/brief-progress";
+import { BriefCompleteCard } from "@/components/brief-complete-card";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -28,6 +31,18 @@ export function ChatArea({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasSetTitle = useRef<Set<string>>(new Set());
+
+  // Compute brief progress based on message count
+  const briefProgress = useMemo(() => {
+    const count = messages.length;
+    if (count >= 8) return 100;
+    if (count >= 6) return 75;
+    if (count >= 4) return 50;
+    if (count >= 2) return 25;
+    return 0;
+  }, [messages.length]);
+
+  const isBriefComplete = briefProgress === 100;
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -122,6 +137,9 @@ export function ChatArea({
         </span>
       </header>
 
+      {/* Brief collection progress bar */}
+      <BriefProgress messageCount={messages.length} />
+
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
@@ -166,15 +184,17 @@ export function ChatArea({
                 content={message.content}
               />
             ))}
+
+            {/* Thinking indicator */}
             {isLoading &&
               messages[messages.length - 1]?.role !== "assistant" && (
-                <div className="flex gap-3 py-4">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-lens-accent/20 text-lens-accent text-xs font-bold">
-                    AI
-                  </div>
-                  <div className="typing-cursor text-lens-muted text-sm"></div>
-                </div>
+                <ThinkingIndicator />
               )}
+
+            {/* Brief complete card */}
+            {isBriefComplete && !isLoading && (
+              <BriefCompleteCard messages={messages} />
+            )}
           </div>
         )}
       </div>
