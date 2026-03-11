@@ -4,7 +4,7 @@
 **Intent**: build → ship → client-ready → live demo → outreach → platform
 **Total Missions**: 28
 **Architecture Bible**: TechStack Tetris Mission Reference (30 missions, 6 worlds, 165 code steps) — pipeline blocks pattern, progressive complexity, crash recovery, safe rollout, query routing all absorbed into Phase 5.
-**Current**: Mission 14 — Fix Deploy Button
+**Current**: Mission 19 — Fork & Strip (Agent Studio begins)
 
 ---
 
@@ -115,13 +115,13 @@ Three parallel agents per mission. Each runs in an isolated worktree. No file ov
 
 ## Phase 3 — Ship Ready
 
-- ▶ **14 — Fix Deploy Button + Live Demo** — Two deliverables:
+- ✅ **14 — Fix Deploy Button + Live Demo** — Two deliverables:
 
   **A) Deploy Button**: Replace `LAUNCH_STACK_URL_PLACEHOLDER` in README.md with a real CloudFormation launch URL. Run `publish.sh` to generate the URL, swap the placeholder. The Deploy to AWS badge must open a working CloudFormation console link with template URL and ArtifactBucket parameter pre-filled.
 
   **B) Live Demo on Vercel**: Deploy the dashboard to Vercel as a public demo link. Seed it with the OperaERP demo data so visitors see a populated dashboard immediately — not an empty screen. The demo should use the demo server (mock backend, no real OpenAI key needed). Add the live demo URL to the README hero section as a "Try Live Demo" badge next to the Deploy to AWS badge. URL format: `https://agentlens-demo.vercel.app` or similar.
 
-- 🔒 **15 — Shadow Mode SDK** — Create `proxy/src/shadow.js` and `sdk/shadow-client.js`. Shadow mode wraps an existing OpenAI client. Every call goes to OpenAI normally AND fires an async non-blocking copy to the AgentLens proxy. The copy is never awaited. Zero latency impact.
+- ✅ **15 — Shadow Mode SDK** — Create `proxy/src/shadow.js` and `sdk/shadow-client.js`. Shadow mode wraps an existing OpenAI client. Every call goes to OpenAI normally AND fires an async non-blocking copy to the AgentLens proxy. The copy is never awaited. Zero latency impact.
 
   ```javascript
   const openai = AgentLens.shadow(new OpenAI({ apiKey }), {
@@ -135,7 +135,7 @@ Three parallel agents per mission. Each runs in an isolated worktree. No file ov
   - Dashboard Overview shows Shadow Mode section: calls captured, projected savings, days until full report
   - After 14 days of shadow data → auto-generate Shadow Mode Report with real waste numbers from actual production traffic
 
-- 🔒 **16 — Anomaly Detection Worker** — Create `proxy/src/anomaly-worker.js`. Lambda scheduled event on 5-minute interval (add CloudWatch Events rule to `infra/cloudformation.yaml`). Five detection rules:
+- ✅ **16 — Anomaly Detection Worker** — Create `proxy/src/anomaly-worker.js`. Lambda scheduled event on 5-minute interval (add CloudWatch Events rule to `infra/cloudformation.yaml`). Five detection rules:
 
   | Rule | Trigger | Action |
   |------|---------|--------|
@@ -155,12 +155,12 @@ Three parallel agents per mission. Each runs in an isolated worktree. No file ov
 
 ## Phase 4 — Sell It
 
-- 🔒 **17 — Demo + Outreach** — Loom recording walking through real agent demo (not seeded data). Pitch deck (PDF). Outreach to KB/docs SaaS CTOs with AgentLens as the product.
+- ⏭ **17 — Demo + Outreach** (skipped — revisit later) — Loom recording walking through real agent demo (not seeded data). Pitch deck (PDF). Outreach to KB/docs SaaS CTOs with AgentLens as the product.
   - **Agent A**: Build pitch deck (HTML → PDF via weasyprint). Slides: problem, solution, architecture, live dashboard screenshots, pricing, CTA.
   - **Agent B**: Prepare Loom script — bullet points for 3-min walkthrough of real agents → dashboard → CFO view
   - **Sequential**: Record Loom, send outreach via /outreach skill
 
-- 🔒 **18 — Stretch Goals** — Python SDK snippet, multi-provider routing (Anthropic/Gemini), usage export CSV.
+- ⏭ **18 — Stretch Goals** (skipped — revisit later) — Python SDK snippet, multi-provider routing (Anthropic/Gemini), usage export CSV.
 
 ---
 
@@ -170,7 +170,7 @@ Three parallel agents per mission. Each runs in an isolated worktree. No file ov
 > Chat-first no-code agent builder. User describes what they want → NPC Guide builds it autonomously → one-click deploy.
 > Fork: Chatbot UI (mckaywrigley/chatbot-ui). Next.js + TypeScript + Tailwind.
 
-- 🔒 **19 — Fork & Strip** — Fork Chatbot UI. Gut: Supabase auth, OpenAI direct proxy, model picker, any features that assume "chat with an LLM." Keep: message rendering, token-by-token streaming (sub-30ms per token), sidebar, input bar, dark theme. Result: clean chat shell that sends messages to `/api/chat`, not OpenAI. Verify streaming renders token-by-token under 30ms. Deploy shell to Vercel to confirm it works standalone.
+- ▶ **19 — Fork & Strip** — Fork Chatbot UI. Gut: Supabase auth, OpenAI direct proxy, model picker, any features that assume "chat with an LLM." Keep: message rendering, token-by-token streaming (sub-30ms per token), sidebar, input bar, dark theme. Result: clean chat shell that sends messages to `/api/chat`, not OpenAI. Verify streaming renders token-by-token under 30ms. Deploy shell to Vercel to confirm it works standalone.
 
 - 🔒 **20 — Conversation Controller** — Stateful backend behind `/api/chat`. Not a dumb LLM proxy — tracks what's been collected (project type? integrations? constraints?), decides what to ask next, knows when the brief is complete. Uses LLM to generate conversational responses, but the controller decides the flow. Returns streaming responses + metadata (brief completion %, current phase). Interactive loading states throughout — animated thinking indicator, phase labels, never a blank screen. User always knows what's happening.
 
