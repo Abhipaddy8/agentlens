@@ -52,6 +52,41 @@ export default function Overview({ stats }) {
         </div>
       </div>
 
+      {stats?.shadow && (
+        <div className="shadow-mode-section">
+          <div className="shadow-header">
+            <div className="shadow-title-row">
+              <span className="section-title">Shadow Mode</span>
+              <span className="badge badge-accent">Active</span>
+            </div>
+            <p className="shadow-description">
+              Shadow mode captures a copy of every LLM call without affecting performance.
+              After 14 days, AgentLens generates a waste report showing exactly how much you can save.
+            </p>
+          </div>
+          <div className="shadow-stats">
+            <div className="shadow-stat">
+              <div className="card-label">Shadow Calls Captured</div>
+              <div className="card-value accent">{(stats.shadow.totalCalls || 0).toLocaleString()}</div>
+            </div>
+            <div className="shadow-stat">
+              <div className="card-label">Projected Monthly Savings</div>
+              <div className="card-value green">{fmt(stats.shadow.projectedMonthlySavings || 0)}</div>
+            </div>
+            <div className="shadow-stat">
+              <div className="card-label">Days Until Full Report</div>
+              <div className="card-value blue">{stats.shadow.daysRemaining != null ? stats.shadow.daysRemaining : 14}</div>
+              <div className="shadow-progress-bar">
+                <div
+                  className="shadow-progress-fill"
+                  style={{ width: `${((14 - (stats.shadow.daysRemaining != null ? stats.shadow.daysRemaining : 14)) / 14) * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {chartData.length > 0 && (
         <div className="chart-container">
           <div className="section-title">Spend by Agent</div>

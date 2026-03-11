@@ -10,7 +10,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-agent-id, x-workflow-id, x-prompt-version",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-agent-id, x-workflow-id, x-prompt-version, x-cache, x-shadow-mode, x-customer-id",
     });
     res.end();
     return;

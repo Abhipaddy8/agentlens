@@ -7,6 +7,7 @@ const { routeModel } = require("./router");
 const { getStats } = require("./stats");
 const { checkRate, setLimit, getLimit, getStatus } = require("./rate-limiter");
 const { trackVersion, getVersions, rollbackTo, updateMetrics } = require("./prompt-versions");
+const { isShadowMode, handleShadowCall } = require("./shadow");
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const UPSTREAM_BASE = process.env.UPSTREAM_BASE || "https://api.openai.com";
@@ -117,6 +118,11 @@ async function handleChatCompletion(event) {
   const { agentId, workflowId, promptVersion } = parseAgentHeaders(headers);
   const model = body.model || "gpt-4o-mini";
   const isStreaming = body.stream === true;
+
+  // --- Shadow Mode: log only, no budget/kill/cache/forward ---
+  if (isShadowMode(headers)) {
+    return handleShadowCall(event);
+  }
 
   // --- Check 1: Kill Switch ---
   const killed = await isKilled(agentId);
@@ -348,7 +354,7 @@ async function handleStreamingForward(event, ctx) {
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-agent-id, x-workflow-id, x-prompt-version, x-cache",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-agent-id, x-workflow-id, x-prompt-version, x-cache, x-shadow-mode, x-customer-id",
     },
     isStream: true,
     stream: upstreamStream.stream,
@@ -559,7 +565,7 @@ function response(statusCode, body) {
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-agent-id, x-workflow-id, x-prompt-version, x-cache",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-agent-id, x-workflow-id, x-prompt-version, x-cache, x-shadow-mode, x-customer-id",
     },
     body: JSON.stringify(body),
   };

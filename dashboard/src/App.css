@@ -200,6 +200,7 @@ tr:hover { background: var(--surface-2); }
 .badge-green { background: rgba(34, 197, 94, 0.15); color: var(--green); }
 .badge-red { background: rgba(239, 68, 68, 0.15); color: var(--red); }
 .badge-orange { background: rgba(245, 158, 11, 0.15); color: var(--orange); }
+.badge-accent { background: var(--accent-glow); color: var(--accent); }
 
 /* Kill switch */
 .kill-switch {
@@ -295,6 +296,77 @@ tr:hover { background: var(--surface-2); }
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 16px;
+}
+
+/* Shadow Mode */
+.shadow-mode-section {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 32px;
+  position: relative;
+  overflow: hidden;
+}
+
+.shadow-mode-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--blue), var(--accent));
+}
+
+.shadow-header {
+  margin-bottom: 20px;
+}
+
+.shadow-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.shadow-title-row .section-title {
+  margin-bottom: 0;
+}
+
+.shadow-description {
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 640px;
+}
+
+.shadow-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.shadow-stat {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.shadow-progress-bar {
+  margin-top: 8px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.shadow-progress-fill {
+  height: 100%;
+  background: var(--blue);
+  border-radius: 2px;
+  transition: width 0.5s ease;
 }
 
 /* Chart container */
