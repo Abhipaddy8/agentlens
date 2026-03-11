@@ -208,4 +208,20 @@
   .build-complete-glow {
     animation: ready-glow 2s ease-in-out 3;
   }
+
+  /* Integration prompt card entrance — slide up + fade in */
+  @keyframes integration-prompt-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .integration-prompt-card {
+    animation: integration-prompt-enter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
 }

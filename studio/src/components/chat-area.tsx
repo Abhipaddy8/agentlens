@@ -11,6 +11,8 @@ import { MissionMapCard } from "@/components/mission-map-card";
 import { BuildProgress } from "@/components/build-progress";
 import { GameSelector } from "@/components/game-selector";
 import { GameWrapper } from "@/components/game-wrapper";
+import { IntegrationPrompt } from "@/components/integration-prompt";
+import type { IntegrationPromptData } from "@/components/integration-prompt";
 import type { MissionMapData } from "@/components/mission-map-card";
 import type { GameChoice } from "@/components/game-selector";
 
@@ -47,6 +49,11 @@ export function ChatArea({
   const [currentTask, setCurrentTask] = useState("");
   const [buildLogs, setBuildLogs] = useState<string[]>([]);
   const buildStartTime = useRef<number>(0);
+
+  // Integration prompt state
+  const [integrationPrompts, setIntegrationPrompts] = useState<
+    Array<{ afterMessageId: string; data: IntegrationPromptData }>
+  >([]);
 
   // Game state
   const [showGameSelector, setShowGameSelector] = useState(false);
@@ -86,6 +93,7 @@ export function ChatArea({
     setShowGameSelector(false);
     setSelectedGame(null);
     setGameDismissed(false);
+    setIntegrationPrompts([]);
     if (gameSelectorTimerRef.current) clearTimeout(gameSelectorTimerRef.current);
   }, [conversationId, setMessages]);
 
@@ -127,6 +135,28 @@ export function ChatArea({
         // Invalid JSON — ignore
       }
     }
+  }, [messages]);
+
+  // Parse integration-prompt data events from assistant messages
+  useEffect(() => {
+    const prompts: Array<{ afterMessageId: string; data: IntegrationPromptData }> = [];
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+      // Match integration prompt markers embedded in content
+      const regex = /<!-- INTEGRATION_PROMPT_START -->([\s\S]*?)<!-- INTEGRATION_PROMPT_END -->/g;
+      let match;
+      while ((match = regex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as IntegrationPromptData;
+          if (parsed.type === "integration-prompt" && parsed.service && parsed.mode) {
+            prompts.push({ afterMessageId: msg.id, data: parsed });
+          }
+        } catch {
+          // Invalid JSON — skip
+        }
+      }
+    }
+    setIntegrationPrompts(prompts);
   }, [messages]);
 
   // Simulate build progress when building starts
@@ -380,11 +410,21 @@ export function ChatArea({
         ) : (
           <div className="mx-auto max-w-3xl px-4 py-6 space-y-1">
             {messages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                role={message.role}
-                content={message.content}
-              />
+              <div key={message.id}>
+                <ChatMessage
+                  role={message.role}
+                  content={message.content}
+                />
+                {/* Render integration prompts attached to this message */}
+                {integrationPrompts
+                  .filter((p) => p.afterMessageId === message.id)
+                  .map((p, idx) => (
+                    <IntegrationPrompt
+                      key={`${message.id}-int-${idx}`}
+                      data={p.data}
+                    />
+                  ))}
+              </div>
             ))}
 
             {/* Thinking indicator */}

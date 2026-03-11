@@ -184,6 +184,29 @@ Respond with ONLY valid JSON, no markdown fences.`;
   }
 
   /**
+   * Add a connected integration to the brief state.
+   * Called when an integration is successfully connected via OAuth/API key/MCP.
+   */
+  addConnectedIntegration(service: string): void {
+    const current = this.briefState.integrations;
+    if (current) {
+      // Avoid duplicates
+      if (!current.toLowerCase().includes(service.toLowerCase())) {
+        this.briefState.integrations = `${current}, ${service}`;
+      }
+    } else {
+      this.briefState.integrations = service;
+    }
+  }
+
+  /**
+   * Get a mutable reference to the brief state (for external updates).
+   */
+  getBriefState(): BriefState {
+    return this.briefState;
+  }
+
+  /**
    * Compile the collected data into a raw brief string.
    */
   compileBrief(): string {

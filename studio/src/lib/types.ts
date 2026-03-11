@@ -51,6 +51,24 @@ export interface ChatMessage {
   content: string;
 }
 
+/** An integration detected from conversation keywords. */
+export interface DetectedIntegration {
+  service: string;
+  mode: "oauth" | "apikey" | "mcp";
+  displayName: string;
+  detected_keyword: string;
+}
+
+/** A stored credential for a connected integration. */
+export interface StoredCredential {
+  service: string;
+  type: "oauth_token" | "api_key" | "mcp_url";
+  connected: boolean;
+  connectedAt: string;
+  expiresAt?: string;
+  metadata?: Record<string, string>;
+}
+
 /** Field definition for the controller's tracking logic. */
 export interface FieldDefinition {
   key: BriefFieldKey;

@@ -5,6 +5,7 @@ import { compileBrief, parseBrief } from "@/lib/brief-compiler";
 import { buildMissionMap, MissionMap } from "@/lib/mission-architect";
 import { enrichMissionMap } from "@/lib/task-generator";
 import { BuildRunner, BuildEvent } from "@/lib/build-runner";
+import { detectIntegrations } from "@/lib/integration-detector";
 
 /**
  * POST /api/chat
@@ -88,6 +89,17 @@ export async function POST(req: NextRequest) {
             streamController.enqueue(
               encoder.encode(
                 `2:${JSON.stringify([{ type: "compiled-brief", brief }])}\n`
+              )
+            );
+          }
+
+          // Detect integrations mentioned in conversation
+          const sessionId = (messages as ChatMessage[])[0]?.content?.slice(0, 16) || "default";
+          const detected = detectIntegrations(messages as ChatMessage[], sessionId);
+          if (detected.length > 0) {
+            streamController.enqueue(
+              encoder.encode(
+                `2:${JSON.stringify(detected.map((d) => ({ type: "integration-prompt", ...d })))}\n`
               )
             );
           }
