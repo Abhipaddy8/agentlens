@@ -162,6 +162,195 @@ Resources:
         Enabled: true
 
   # ==========================================
+  # Agent Runtime DynamoDB Tables
+  # ==========================================
+
+  CheckpointsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-checkpoints'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: runIdStepIndex
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: runIdStepIndex
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  MemoryLongTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-memory-long'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: memoryId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: memoryId
+          KeyType: RANGE
+
+  MemoryShortTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-memory-short'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: runIdStepIndex
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: runIdStepIndex
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  MemorySharedTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-memory-shared'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: accountId
+          AttributeType: S
+        - AttributeName: memoryId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: accountId
+          KeyType: HASH
+        - AttributeName: memoryId
+          KeyType: RANGE
+
+  AgentSessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-agent-sessions'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  # ==========================================
+  # SNS Topic for Human-in-the-Loop Notifications
+  # ==========================================
+
+  AgentNotificationsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub '${AWS::StackName}-agent-notifications'
+
+  # ==========================================
+  # IAM Role for Agent Runtime
+  # ==========================================
+
+  AgentRuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-agent-runtime-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AgentMemoryAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt MemoryLongTable.Arn
+                  - !Sub '${MemoryLongTable.Arn}/index/*'
+                  - !GetAtt MemoryShortTable.Arn
+                  - !Sub '${MemoryShortTable.Arn}/index/*'
+                  - !GetAtt MemorySharedTable.Arn
+                  - !Sub '${MemorySharedTable.Arn}/index/*'
+                  - !GetAtt AgentSessionsTable.Arn
+                  - !Sub '${AgentSessionsTable.Arn}/index/*'
+        - PolicyName: CheckpointAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt CheckpointsTable.Arn
+                  - !Sub '${CheckpointsTable.Arn}/index/*'
+        - PolicyName: InvokeProxy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt ProxyFunction.Arn
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/agentlens/*'
+        - PolicyName: SNSNotifications
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource:
+                  - !Ref AgentNotificationsTopic
+
+  # ==========================================
   # IAM Role for Lambda
   # ==========================================
 
@@ -599,6 +788,38 @@ Outputs:
   StackRegion:
     Description: AWS region where AgentLens is deployed
     Value: !Ref AWS::Region
+
+  CheckpointsTableName:
+    Description: DynamoDB table for agent crash-recovery checkpoints
+    Value: !Ref CheckpointsTable
+
+  MemoryLongTableName:
+    Description: DynamoDB table for agent long-term memory
+    Value: !Ref MemoryLongTable
+
+  MemoryShortTableName:
+    Description: DynamoDB table for agent short-term (run-scoped) memory
+    Value: !Ref MemoryShortTable
+
+  MemorySharedTableName:
+    Description: DynamoDB table for shared cross-agent memory
+    Value: !Ref MemorySharedTable
+
+  AgentSessionsTableName:
+    Description: DynamoDB table for agent session logs
+    Value: !Ref AgentSessionsTable
+
+  AgentRuntimeRoleArn:
+    Description: IAM role ARN for deployed agents (memory, checkpoints, proxy, SNS)
+    Value: !GetAtt AgentRuntimeRole.Arn
+
+  AgentNotificationsTopicArn:
+    Description: SNS topic ARN for human-in-the-loop agent notifications
+    Value: !Ref AgentNotificationsTopic
+
+  ProxyAutoWireUrl:
+    Description: Proxy endpoint for agent auto-wiring — agents set OPENAI_BASE_URL to this
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/prod'
 
   InstallInstructions:
     Description: Quick start

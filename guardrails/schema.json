@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentlens.dev/schemas/agentlens-agent.json",
+  "title": "AgentLens Agent Configuration",
+  "description": "Standard schema for agents built by AgentLens Agent Studio. Every deployed agent must produce a valid file matching this schema.",
+  "type": "object",
+  "required": ["name", "version", "description", "entryPoint", "trigger", "output", "budget", "checkpoint", "proxy"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+      "description": "Agent name. Lowercase alphanumeric with hyphens. Used as the agent identifier across proxy, dashboard, and DynamoDB."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version (e.g., 1.0.0). Incremented on every deploy."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 500,
+      "description": "Plain English description of what this agent does. Shown in the dashboard."
+    },
+    "entryPoint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to the Lambda handler file relative to the agent root (e.g., 'handler.js')."
+    },
+    "trigger": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["cron", "webhook", "manual"],
+          "description": "How the agent is invoked."
+        },
+        "schedule": {
+          "type": "string",
+          "description": "Cron expression (e.g., 'rate(1 hour)' or 'cron(0 9 * * ? *)'). Required when type is 'cron'."
+        },
+        "webhookPath": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "URL path for webhook trigger (e.g., '/webhook/deal-closed'). Required when type is 'webhook'."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "cron" } } },
+          "then": { "required": ["schedule"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "webhook" } } },
+          "then": { "required": ["webhookPath"] }
+        }
+      ]
+    },
+    "integrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Integration name (e.g., 'slack', 'hubspot', 'google-sheets')."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["oauth", "api_key"],
+            "description": "Authentication method for this integration."
+          },
+          "config": {
+            "type": "object",
+            "description": "Integration-specific config. For api_key type, must include 'envVar' pointing to the environment variable name.",
+            "additionalProperties": true
+          }
+        }
+      },
+      "default": []
+    },
+    "dataSources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Data source name (e.g., 'hubspot', 'postgres', 'csv-upload')."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["api", "database", "file"],
+            "description": "Data source type."
+          },
+          "config": {
+            "type": "object",
+            "description": "Data source connection config. Never include credentials directly — use envVar references.",
+            "additionalProperties": true
+          }
+        }
+      },
+      "default": []
+    },
+    "output": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["slack", "email", "webhook", "database"],
+          "description": "Where the agent sends its output."
+        },
+        "config": {
+          "type": "object",
+          "description": "Output-specific config (e.g., Slack channel, webhook URL env var, database table).",
+          "additionalProperties": true
+        }
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "timezone": {
+          "type": "string",
+          "description": "IANA timezone (e.g., 'America/New_York', 'Asia/Kolkata')."
+        },
+        "runAt": {
+          "type": "string",
+          "description": "Preferred run time in HH:MM format (e.g., '09:00')."
+        },
+        "frequency": {
+          "type": "string",
+          "description": "Human-readable frequency (e.g., 'every hour', 'daily', 'weekly on Monday')."
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "longTerm": {
+          "type": "boolean",
+          "description": "Enable long-term memory (persists across runs, importance-scored).",
+          "default": false
+        },
+        "shortTerm": {
+          "type": "boolean",
+          "description": "Enable short-term memory (current run only, cleared on completion).",
+          "default": true
+        },
+        "shared": {
+          "type": "boolean",
+          "description": "Enable shared memory (readable by all agents in the account).",
+          "default": false
+        }
+      }
+    },
+    "humanInTheLoop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable human-in-the-loop approval flow.",
+          "default": false
+        },
+        "approvalChannel": {
+          "type": "string",
+          "enum": ["slack", "whatsapp", "email"],
+          "description": "Channel for sending approval requests."
+        },
+        "actions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of action names that require human approval (e.g., ['send-email', 'delete-record', 'update-crm'])."
+        }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": { "required": ["approvalChannel", "actions"] }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["monthlyLimit", "primaryModel", "fallbackModel"],
+      "additionalProperties": false,
+      "properties": {
+        "monthlyLimit": {
+          "type": "number",
+          "minimum": 0.01,
+          "description": "Maximum monthly LLM spend in USD. Agent halts when exceeded."
+        },
+        "primaryModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Default LLM model (e.g., 'gpt-4o', 'claude-3.5-sonnet')."
+        },
+        "fallbackModel": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cheaper fallback model used when primary fails or budget is low (e.g., 'gpt-4o-mini')."
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "required": ["enabled", "retryStrategy", "maxRetries"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "const": true,
+          "description": "Checkpoint MUST be enabled. Non-negotiable."
+        },
+        "retryStrategy": {
+          "type": "string",
+          "enum": ["exponential", "linear"],
+          "description": "Retry backoff strategy. Exponential recommended."
+        },
+        "maxRetries": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Maximum retry attempts per step before failing."
+        }
+      }
+    },
+    "proxy": {
+      "type": "object",
+      "required": ["enabled", "agentId"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "const": true,
+          "description": "Proxy MUST be enabled. All LLM calls route through AgentLens proxy."
+        },
+        "agentId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+          "description": "Agent identifier used in x-agent-id header. Must match the agent name."
+        }
+      }
+    }
+  }
+}
