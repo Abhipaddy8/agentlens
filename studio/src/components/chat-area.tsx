@@ -12,7 +12,15 @@ import { BuildProgress } from "@/components/build-progress";
 import { GameSelector } from "@/components/game-selector";
 import { GameWrapper } from "@/components/game-wrapper";
 import { IntegrationPrompt } from "@/components/integration-prompt";
+import { DeployProgress } from "@/components/deploy-progress";
+import { DeployCard } from "@/components/deploy-card";
+import { DeployButton } from "@/components/deploy-button";
+import { RollbackNotification } from "@/components/rollback-notification";
 import type { IntegrationPromptData } from "@/components/integration-prompt";
+import type { DeployProgressData } from "@/components/deploy-progress";
+import type { DeployCompleteData } from "@/components/deploy-card";
+import type { RollbackResultData } from "@/components/rollback-notification";
+import type { DeployConfig } from "@/components/deploy-button";
 import type { MissionMapData } from "@/components/mission-map-card";
 import type { GameChoice } from "@/components/game-selector";
 
@@ -55,6 +63,12 @@ export function ChatArea({
     Array<{ afterMessageId: string; data: IntegrationPromptData }>
   >([]);
 
+  // Deploy state
+  const [deployProgress, setDeployProgress] = useState<DeployProgressData | null>(null);
+  const [deployComplete, setDeployComplete] = useState<DeployCompleteData | null>(null);
+  const [rollbackResult, setRollbackResult] = useState<RollbackResultData | null>(null);
+  const [deployConfig, setDeployConfig] = useState<DeployConfig | null>(null);
+
   // Game state
   const [showGameSelector, setShowGameSelector] = useState(false);
   const [selectedGame, setSelectedGame] = useState<GameChoice | null>(null);
@@ -94,6 +108,10 @@ export function ChatArea({
     setSelectedGame(null);
     setGameDismissed(false);
     setIntegrationPrompts([]);
+    setDeployProgress(null);
+    setDeployComplete(null);
+    setRollbackResult(null);
+    setDeployConfig(null);
     if (gameSelectorTimerRef.current) clearTimeout(gameSelectorTimerRef.current);
   }, [conversationId, setMessages]);
 
@@ -157,6 +175,59 @@ export function ChatArea({
       }
     }
     setIntegrationPrompts(prompts);
+  }, [messages]);
+
+  // Parse deploy data events from assistant messages
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+
+      // Deploy progress
+      const progressRegex = /<!-- DEPLOY_PROGRESS_START -->([\s\S]*?)<!-- DEPLOY_PROGRESS_END -->/g;
+      let match;
+      while ((match = progressRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as DeployProgressData;
+          if (parsed.type === "deploy-progress") {
+            setDeployProgress(parsed);
+          }
+        } catch { /* skip */ }
+      }
+
+      // Deploy complete
+      const completeRegex = /<!-- DEPLOY_COMPLETE_START -->([\s\S]*?)<!-- DEPLOY_COMPLETE_END -->/g;
+      while ((match = completeRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as DeployCompleteData;
+          if (parsed.type === "deploy-complete") {
+            setDeployComplete(parsed);
+            setDeployProgress(null); // Clear progress once complete
+          }
+        } catch { /* skip */ }
+      }
+
+      // Rollback result
+      const rollbackRegex = /<!-- ROLLBACK_RESULT_START -->([\s\S]*?)<!-- ROLLBACK_RESULT_END -->/g;
+      while ((match = rollbackRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as RollbackResultData;
+          if (parsed.type === "rollback-result") {
+            setRollbackResult(parsed);
+          }
+        } catch { /* skip */ }
+      }
+
+      // Deploy config (triggers deploy button)
+      const configRegex = /<!-- DEPLOY_CONFIG_START -->([\s\S]*?)<!-- DEPLOY_CONFIG_END -->/g;
+      while ((match = configRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as DeployConfig & { type: string };
+          if (parsed.agentName) {
+            setDeployConfig(parsed);
+          }
+        } catch { /* skip */ }
+      }
+    }
   }, [messages]);
 
   // Simulate build progress when building starts
@@ -306,6 +377,25 @@ export function ChatArea({
     setGameDismissed(true);
     setShowGameSelector(false);
   }, []);
+
+  const handleDeploy = useCallback(() => {
+    // Emit a user message to trigger deploy, similar to build start
+    setMessages([
+      ...messages,
+      {
+        id: `deploy-start-${Date.now()}`,
+        role: "user" as const,
+        content: "Deploy the agent now.",
+        createdAt: new Date(),
+      },
+    ]);
+    setDeployConfig(null); // Hide the button once clicked
+
+    const fakeEvent = {
+      preventDefault: () => {},
+    } as React.FormEvent;
+    handleSubmit(fakeEvent);
+  }, [messages, setMessages, handleSubmit]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -497,6 +587,26 @@ export function ChatArea({
                   </p>
                 </div>
               </div>
+            )}
+
+            {/* Deploy button — shown after build completes (if config provided) */}
+            {buildComplete && deployConfig && !deployProgress && !deployComplete && (
+              <DeployButton config={deployConfig} onDeploy={handleDeploy} />
+            )}
+
+            {/* Deploy progress — shown during deployment */}
+            {deployProgress && !deployComplete && (
+              <DeployProgress data={deployProgress} />
+            )}
+
+            {/* Deploy complete card — "Your agent is live" */}
+            {deployComplete && (
+              <DeployCard data={deployComplete} />
+            )}
+
+            {/* Rollback notification — shown after safe rollout check */}
+            {rollbackResult && (
+              <RollbackNotification data={rollbackResult} />
             )}
           </div>
         )}

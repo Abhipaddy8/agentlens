@@ -564,6 +564,26 @@ Resources:
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*'
 
   # ==========================================
+  # Agent Deploy Bucket (shared S3 for agent runtime zips)
+  # ==========================================
+
+  AgentDeployBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-agent-deploy-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: CleanupOldVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+
+  # ==========================================
   # Dashboard Hosting (S3 + CloudFront)
   # ==========================================
 
@@ -784,6 +804,14 @@ Outputs:
   AnomaliesTableName:
     Description: DynamoDB table for anomaly records
     Value: !Ref AnomaliesTable
+
+  AgentDeployBucket:
+    Description: S3 bucket for agent runtime code zips (used by deploy-agent.sh)
+    Value: !Ref AgentDeployBucket
+
+  AgentDeployBucketArn:
+    Description: ARN of the agent deploy bucket
+    Value: !GetAtt AgentDeployBucket.Arn
 
   StackRegion:
     Description: AWS region where AgentLens is deployed

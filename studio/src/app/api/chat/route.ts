@@ -1,11 +1,15 @@
 import { NextRequest } from "next/server";
 import { ConversationController } from "@/lib/controller";
-import { ChatMessage } from "@/lib/types";
+import { ChatMessage, DeployEvent, ShadowTestEvent } from "@/lib/types";
 import { compileBrief, parseBrief } from "@/lib/brief-compiler";
 import { buildMissionMap, MissionMap } from "@/lib/mission-architect";
 import { enrichMissionMap } from "@/lib/task-generator";
 import { BuildRunner, BuildEvent } from "@/lib/build-runner";
 import { detectIntegrations } from "@/lib/integration-detector";
+import { DeployPipeline, AgentConfig, CredentialMap } from "@/lib/deploy-pipeline";
+import { shadowTest, generateDefaultTestCases } from "@/lib/shadow-tester";
+import { evaluateQuality, formatQualityReport } from "@/lib/quality-evaluator";
+import { recordDeployment, rollback as rollbackAgent, getActiveVersion, getPreviousVersion } from "@/lib/rollback-manager";
 
 /**
  * POST /api/chat
@@ -26,7 +30,23 @@ import { detectIntegrations } from "@/lib/integration-detector";
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { messages, action, missionMap } = body;
+  const { messages, action, missionMap, agentConfig, credentials, sessionId: reqSessionId, previousConfig } = body;
+
+  // --- DEPLOY ACTION: Run deploy pipeline (with optional shadow test for updates) ---
+  if (action === "deploy") {
+    if (!agentConfig) {
+      return new Response(
+        JSON.stringify({ error: "agentConfig is required for deploy action" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+    return handleDeploy(
+      agentConfig as AgentConfig,
+      (credentials || {}) as CredentialMap,
+      reqSessionId || "default",
+      previousConfig as AgentConfig | undefined
+    );
+  }
 
   // --- BUILD ACTION: Simulate mission execution with progress events ---
   if (action === "build") {
@@ -147,6 +167,162 @@ export async function POST(req: NextRequest) {
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
+}
+
+/**
+ * Handle the deploy action — run deploy pipeline with optional shadow testing.
+ *
+ * For NEW agents: straight deploy.
+ * For UPDATES (previousConfig provided): shadow test → quality eval → deploy or rollback.
+ *
+ * Streams all events as SSE so the frontend can render deploy progress,
+ * shadow test comparisons, and quality reports inline in the chat.
+ */
+async function handleDeploy(
+  agentConfig: AgentConfig,
+  credentials: CredentialMap,
+  sessionId: string,
+  previousConfig?: AgentConfig
+) {
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(streamController) {
+      try {
+        let tokenCount = 0;
+
+        const emitData = (data: unknown[]) => {
+          streamController.enqueue(
+            encoder.encode(`2:${JSON.stringify(data)}\n`)
+          );
+        };
+
+        const emitText = (text: string) => {
+          tokenCount++;
+          streamController.enqueue(
+            encoder.encode(`0:${JSON.stringify(text)}\n`)
+          );
+        };
+
+        // --- If this is an UPDATE, run shadow test first ---
+        if (previousConfig) {
+          emitText(`\n**Safe Rollout** — Shadow testing v${previousConfig.version} vs v${agentConfig.version}\n\n`);
+
+          const testCases = generateDefaultTestCases(agentConfig);
+          emitText(`Running ${testCases.length} test cases against both versions...\n\n`);
+
+          let finalMetrics = null;
+
+          for await (const event of shadowTest(previousConfig, agentConfig, testCases)) {
+            emitData([{ type: "shadow-test-event", event }]);
+
+            if (event.type === "shadow-test-progress") {
+              emitText(`  Test ${event.testCase}/${event.total}: old=${event.oldResult?.latency}ms new=${event.newResult?.latency}ms\n`);
+            }
+
+            if (event.type === "shadow-test-complete") {
+              finalMetrics = event;
+              emitText(`\nShadow test complete — quality score: ${event.qualityScore}/100\n`);
+            }
+          }
+
+          // Evaluate quality
+          if (finalMetrics && finalMetrics.metrics) {
+            const qualityReport = evaluateQuality({
+              qualityScore: finalMetrics.qualityScore!,
+              passed: finalMetrics.passed!,
+              threshold: 80,
+              metrics: finalMetrics.metrics,
+            });
+
+            emitData([{ type: "quality-report", report: qualityReport }]);
+            emitText(formatQualityReport(qualityReport));
+
+            // If rollback recommended, execute rollback and stop
+            if (qualityReport.recommendation === "rollback") {
+              emitText(`\n**Auto-rollback triggered.** Quality score ${qualityReport.qualityScore} below threshold.\n`);
+
+              const active = getActiveVersion(agentConfig.proxy.agentId);
+              const prev = getPreviousVersion(agentConfig.proxy.agentId);
+              if (active && prev) {
+                const result = await rollbackAgent(agentConfig.proxy.agentId, active.version, prev.version);
+                emitData([{ type: "rollback-event", result }]);
+                emitText(`\nRolled back: ${result.message}\n`);
+              }
+
+              // Finish stream — no deploy
+              streamController.enqueue(
+                encoder.encode(
+                  `d:${JSON.stringify({ finishReason: "stop", usage: { promptTokens: 0, completionTokens: tokenCount } })}\n`
+                )
+              );
+              streamController.close();
+              return;
+            }
+
+            // If manual review needed, flag it but continue deploy (user approved)
+            if (qualityReport.recommendation === "manual-review") {
+              emitText(`\n**Manual review recommended.** Proceeding with deploy as requested.\n\n`);
+            }
+          }
+        }
+
+        // --- Deploy ---
+        emitText(`\n**Deploying ${agentConfig.name} v${agentConfig.version}**\n\n`);
+
+        const pipeline = new DeployPipeline(agentConfig, credentials, sessionId);
+
+        for await (const event of pipeline.deploy()) {
+          emitData([{ type: "deploy-event", event }]);
+
+          // Human-readable text for milestones
+          if (event.type === "deploy-progress" && event.status === "complete") {
+            emitText(`  [${event.step}] ${event.message}\n`);
+          } else if (event.type === "deploy-progress" && event.status === "in-progress") {
+            emitText(`> ${event.message}...\n`);
+          } else if (event.type === "deploy-complete") {
+            recordDeployment(
+              event.agentId!,
+              agentConfig.version,
+              `arn:aws:lambda:${process.env.AWS_REGION || "us-east-1"}:${process.env.AWS_ACCOUNT_ID || "123456789012"}:function:agentlens-${event.agentId}`
+            );
+            emitText(`\n---\n\n**Deploy complete.**\n- Agent: \`${event.agentId}\`\n- Endpoint: \`${event.endpoint}\`\n- Dashboard: ${event.dashboardUrl}\n`);
+          } else if (event.type === "deploy-error") {
+            emitText(`\n[Deploy Error: ${event.message}]\n`);
+          }
+        }
+
+        // Finish signal
+        streamController.enqueue(
+          encoder.encode(
+            `d:${JSON.stringify({ finishReason: "stop", usage: { promptTokens: 0, completionTokens: tokenCount } })}\n`
+          )
+        );
+        streamController.close();
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Deploy error";
+        streamController.enqueue(
+          encoder.encode(
+            `2:${JSON.stringify([{ type: "deploy-event", event: { type: "deploy-error", message: errMsg } }])}\n`
+          )
+        );
+        streamController.enqueue(
+          encoder.encode(
+            `d:${JSON.stringify({ finishReason: "error", usage: { promptTokens: 0, completionTokens: 0 } })}\n`
+          )
+        );
+        streamController.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }
 
 /**

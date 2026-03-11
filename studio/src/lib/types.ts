@@ -69,6 +69,69 @@ export interface StoredCredential {
   metadata?: Record<string, string>;
 }
 
+// --- Deploy Pipeline Types ---
+
+export interface DeployEvent {
+  type: "deploy-progress" | "deploy-complete" | "deploy-error";
+  step?: string;
+  status?: "pending" | "in-progress" | "complete" | "failed";
+  message?: string;
+  agentId?: string;
+  endpoint?: string;
+  dashboardUrl?: string;
+}
+
+export interface ShadowTestEvent {
+  type: "shadow-test-progress" | "shadow-test-complete";
+  testCase?: number;
+  total?: number;
+  oldResult?: { latency: number; error: boolean; cost: number; response: string };
+  newResult?: { latency: number; error: boolean; cost: number; response: string };
+  qualityScore?: number;
+  passed?: boolean;
+  metrics?: ShadowTestMetrics;
+}
+
+export interface ShadowTestMetrics {
+  responseQuality: number;
+  latencyOld: number;
+  latencyNew: number;
+  errorRateOld: number;
+  errorRateNew: number;
+  costOld: number;
+  costNew: number;
+}
+
+export interface ShadowTestResult {
+  qualityScore: number;
+  passed: boolean;
+  threshold: number;
+  metrics: ShadowTestMetrics;
+}
+
+export interface QualityReport {
+  passed: boolean;
+  qualityScore: number;
+  recommendation: "deploy" | "rollback" | "manual-review";
+  details: Record<string, number>;
+}
+
+export interface RollbackResult {
+  success: boolean;
+  agentId: string;
+  fromVersion: string;
+  toVersion: string;
+  timestamp: string;
+  message: string;
+}
+
+export interface AgentVersionEntry {
+  version: string;
+  deployedAt: string;
+  status: "active" | "retired" | "rolled-back";
+  lambdaArn?: string;
+}
+
 /** Field definition for the controller's tracking logic. */
 export interface FieldDefinition {
   key: BriefFieldKey;

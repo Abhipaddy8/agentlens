@@ -1,0 +1,333 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  AgentLens — Per-agent deployment template.
+  Deploys a single agent as a Lambda function with webhook or cron trigger,
+  DynamoDB tables for checkpoint/memory, and auto-wires to the AgentLens proxy.
+
+Parameters:
+  AgentId:
+    Type: String
+    Description: Unique agent identifier (lowercase, alphanumeric, hyphens)
+    AllowedPattern: '[a-z0-9\-]+'
+    ConstraintDescription: Must be lowercase alphanumeric with hyphens only
+
+  AgentName:
+    Type: String
+    Description: Human-readable agent name
+
+  ProxyEndpoint:
+    Type: String
+    Description: AgentLens proxy URL for auto-wiring (OPENAI_BASE_URL)
+
+  TriggerType:
+    Type: String
+    AllowedValues:
+      - webhook
+      - cron
+      - manual
+    Description: How the agent is triggered
+
+  CronSchedule:
+    Type: String
+    Default: ''
+    Description: >
+      Cron expression if TriggerType=cron (e.g. "rate(1 hour)").
+      Ignored for webhook and manual triggers.
+
+  OpenAIApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenAI API key for the agent's LLM calls
+
+  RuntimeCodeS3Bucket:
+    Type: String
+    Description: S3 bucket containing the agent runtime code zip
+
+  RuntimeCodeS3Key:
+    Type: String
+    Description: S3 key for the agent runtime zip package
+
+  MemoryEnabled:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable DynamoDB memory table for this agent
+
+  CheckpointEnabled:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Enable DynamoDB checkpoint table for this agent
+
+Conditions:
+  IsWebhook: !Equals [!Ref TriggerType, 'webhook']
+  IsCron: !Equals [!Ref TriggerType, 'cron']
+  HasMemory: !Equals [!Ref MemoryEnabled, 'true']
+  HasCheckpoint: !Equals [!Ref CheckpointEnabled, 'true']
+
+Resources:
+
+  # ==========================================
+  # Agent Lambda Function
+  # ==========================================
+
+  AgentFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'agentlens-agent-${AgentId}'
+      Handler: handler.handler
+      Runtime: nodejs20.x
+      MemorySize: 256
+      Timeout: 300
+      Role: !GetAtt AgentFunctionRole.Arn
+      Code:
+        S3Bucket: !Ref RuntimeCodeS3Bucket
+        S3Key: !Ref RuntimeCodeS3Key
+      Environment:
+        Variables:
+          AGENT_ID: !Ref AgentId
+          AGENT_NAME: !Ref AgentName
+          PROXY_ENDPOINT: !Ref ProxyEndpoint
+          OPENAI_API_KEY: !Ref OpenAIApiKey
+          OPENAI_BASE_URL: !Ref ProxyEndpoint
+          CHECKPOINT_TABLE: !If
+            - HasCheckpoint
+            - !Ref AgentCheckpointTable
+            - ''
+          MEMORY_TABLE: !If
+            - HasMemory
+            - !Ref AgentMemoryTable
+            - ''
+
+  # ==========================================
+  # IAM Role for Agent Lambda
+  # ==========================================
+
+  AgentFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'agentlens-agent-${AgentId}-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !If
+                    - HasCheckpoint
+                    - !GetAtt AgentCheckpointTable.Arn
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/none'
+                  - !If
+                    - HasCheckpoint
+                    - !Sub '${AgentCheckpointTable.Arn}/index/*'
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/none/index/*'
+                  - !If
+                    - HasMemory
+                    - !GetAtt AgentMemoryTable.Arn
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/none'
+                  - !If
+                    - HasMemory
+                    - !Sub '${AgentMemoryTable.Arn}/index/*'
+                    - !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/none/index/*'
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/agentlens-agent-${AgentId}:*'
+        - PolicyName: InvokeProxy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:agentlens-*-proxy'
+
+  # ==========================================
+  # CloudWatch Log Group
+  # ==========================================
+
+  AgentLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/agentlens-agent-${AgentId}'
+      RetentionInDays: 30
+
+  # ==========================================
+  # Webhook Trigger (API Gateway HTTP API)
+  # ==========================================
+
+  WebhookApi:
+    Type: AWS::ApiGatewayV2::Api
+    Condition: IsWebhook
+    Properties:
+      Name: !Sub 'agentlens-agent-${AgentId}-webhook'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowMethods:
+          - POST
+          - OPTIONS
+
+  WebhookIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: IsWebhook
+    Properties:
+      ApiId: !Ref WebhookApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt AgentFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  WebhookRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: IsWebhook
+    Properties:
+      ApiId: !Ref WebhookApi
+      RouteKey: 'POST /trigger'
+      Target: !Sub 'integrations/${WebhookIntegration}'
+
+  WebhookStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Condition: IsWebhook
+    Properties:
+      ApiId: !Ref WebhookApi
+      StageName: prod
+      AutoDeploy: true
+
+  WebhookLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Condition: IsWebhook
+    Properties:
+      FunctionName: !Ref AgentFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebhookApi}/*'
+
+  # ==========================================
+  # Cron Trigger (CloudWatch Events Rule)
+  # ==========================================
+
+  CronRule:
+    Type: AWS::Events::Rule
+    Condition: IsCron
+    Properties:
+      Name: !Sub 'agentlens-agent-${AgentId}-schedule'
+      Description: !Sub 'Scheduled trigger for agent ${AgentName}'
+      ScheduleExpression: !Ref CronSchedule
+      State: ENABLED
+      Targets:
+        - Id: AgentTarget
+          Arn: !GetAtt AgentFunction.Arn
+          Input: !Sub '{"source":"cron","agentId":"${AgentId}"}'
+
+  CronPermission:
+    Type: AWS::Lambda::Permission
+    Condition: IsCron
+    Properties:
+      FunctionName: !Ref AgentFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CronRule.Arn
+
+  # ==========================================
+  # DynamoDB — Agent Checkpoint Table
+  # ==========================================
+
+  AgentCheckpointTable:
+    Type: AWS::DynamoDB::Table
+    Condition: HasCheckpoint
+    Properties:
+      TableName: !Sub 'agentlens-agent-${AgentId}-checkpoints'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: stepId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: stepId
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  # ==========================================
+  # DynamoDB — Agent Memory Table
+  # ==========================================
+
+  AgentMemoryTable:
+    Type: AWS::DynamoDB::Table
+    Condition: HasMemory
+    Properties:
+      TableName: !Sub 'agentlens-agent-${AgentId}-memory'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: agentId
+          AttributeType: S
+        - AttributeName: memoryId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: agentId
+          KeyType: HASH
+        - AttributeName: memoryId
+          KeyType: RANGE
+
+# ==========================================
+# Outputs
+# ==========================================
+
+Outputs:
+  AgentArn:
+    Description: Agent Lambda function ARN
+    Value: !GetAtt AgentFunction.Arn
+
+  AgentEndpoint:
+    Description: Agent trigger endpoint
+    Value: !If
+      - IsWebhook
+      - !Sub 'https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/prod/trigger'
+      - !If
+        - IsCron
+        - !Sub 'N/A - Cron triggered (${CronSchedule})'
+        - 'N/A - Manual trigger only'
+
+  AgentId:
+    Description: Unique agent identifier
+    Value: !Ref AgentId
+
+  DashboardUrl:
+    Description: Link to agent in observability dashboard
+    Value: !Sub 'https://dashboard.agentlens.dev/agents/${AgentId}'

@@ -224,4 +224,52 @@
   .integration-prompt-card {
     animation: integration-prompt-enter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
+
+  /* Deploy progress card entrance */
+  .deploy-progress-card {
+    animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Deploy card (live) entrance — scale up + fade in */
+  @keyframes deploy-card-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .deploy-card {
+    animation: deploy-card-enter 0.6s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Rollback notification entrance */
+  .rollback-notification-card {
+    animation: integration-prompt-enter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* Deploy button entrance */
+  .deploy-button-card {
+    animation: deploy-card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.3s forwards;
+    opacity: 0;
+  }
+
+  /* Deploy modal entrance */
+  @keyframes deploy-modal-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.92) translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .deploy-modal-enter {
+    animation: deploy-modal-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
 }
