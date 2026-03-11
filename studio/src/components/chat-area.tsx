@@ -16,6 +16,9 @@ import { DeployProgress } from "@/components/deploy-progress";
 import { DeployCard } from "@/components/deploy-card";
 import { DeployButton } from "@/components/deploy-button";
 import { RollbackNotification } from "@/components/rollback-notification";
+import { ActivityFeed } from "@/components/activity-feed";
+import { MemoryDisplay } from "@/components/memory-display";
+import { QueryRoutingViz } from "@/components/query-routing-viz";
 import type { IntegrationPromptData } from "@/components/integration-prompt";
 import type { DeployProgressData } from "@/components/deploy-progress";
 import type { DeployCompleteData } from "@/components/deploy-card";
@@ -23,6 +26,9 @@ import type { RollbackResultData } from "@/components/rollback-notification";
 import type { DeployConfig } from "@/components/deploy-button";
 import type { MissionMapData } from "@/components/mission-map-card";
 import type { GameChoice } from "@/components/game-selector";
+import type { ActivityFeedData } from "@/components/activity-feed";
+import type { MemoryDisplayData } from "@/components/memory-display";
+import type { RoutingVizData } from "@/components/query-routing-viz";
 
 interface ChatAreaProps {
   conversationId: string | null;
@@ -69,6 +75,11 @@ export function ChatArea({
   const [rollbackResult, setRollbackResult] = useState<RollbackResultData | null>(null);
   const [deployConfig, setDeployConfig] = useState<DeployConfig | null>(null);
 
+  // Activity feed, memory, routing state
+  const [activityFeedData, setActivityFeedData] = useState<ActivityFeedData | null>(null);
+  const [memoryData, setMemoryData] = useState<MemoryDisplayData | null>(null);
+  const [routingData, setRoutingData] = useState<RoutingVizData | null>(null);
+
   // Game state
   const [showGameSelector, setShowGameSelector] = useState(false);
   const [selectedGame, setSelectedGame] = useState<GameChoice | null>(null);
@@ -92,7 +103,7 @@ export function ChatArea({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, missionMap, isBuilding, selectedGame, showGameSelector]);
+  }, [messages, missionMap, isBuilding, selectedGame, showGameSelector, activityFeedData, memoryData, routingData]);
 
   // Clear messages when switching conversations
   useEffect(() => {
@@ -112,6 +123,9 @@ export function ChatArea({
     setDeployComplete(null);
     setRollbackResult(null);
     setDeployConfig(null);
+    setActivityFeedData(null);
+    setMemoryData(null);
+    setRoutingData(null);
     if (gameSelectorTimerRef.current) clearTimeout(gameSelectorTimerRef.current);
   }, [conversationId, setMessages]);
 
@@ -224,6 +238,47 @@ export function ChatArea({
           const parsed = JSON.parse(match[1]) as DeployConfig & { type: string };
           if (parsed.agentName) {
             setDeployConfig(parsed);
+          }
+        } catch { /* skip */ }
+      }
+    }
+  }, [messages]);
+
+  // Parse activity-feed, memory-display, routing-viz data events from assistant messages
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.role !== "assistant") continue;
+
+      // Activity feed
+      const activityRegex = /<!-- ACTIVITY_FEED_START -->([\s\S]*?)<!-- ACTIVITY_FEED_END -->/g;
+      let match;
+      while ((match = activityRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as ActivityFeedData;
+          if (parsed.type === "activity-feed") {
+            setActivityFeedData(parsed);
+          }
+        } catch { /* skip */ }
+      }
+
+      // Memory display
+      const memoryRegex = /<!-- MEMORY_DISPLAY_START -->([\s\S]*?)<!-- MEMORY_DISPLAY_END -->/g;
+      while ((match = memoryRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as MemoryDisplayData;
+          if (parsed.type === "memory-display") {
+            setMemoryData(parsed);
+          }
+        } catch { /* skip */ }
+      }
+
+      // Routing viz
+      const routingRegex = /<!-- ROUTING_VIZ_START -->([\s\S]*?)<!-- ROUTING_VIZ_END -->/g;
+      while ((match = routingRegex.exec(msg.content)) !== null) {
+        try {
+          const parsed = JSON.parse(match[1]) as RoutingVizData;
+          if (parsed.type === "routing-viz") {
+            setRoutingData(parsed);
           }
         } catch { /* skip */ }
       }
@@ -607,6 +662,28 @@ export function ChatArea({
             {/* Rollback notification — shown after safe rollout check */}
             {rollbackResult && (
               <RollbackNotification data={rollbackResult} />
+            )}
+
+            {/* Activity feed — shown after deploy, agent is running */}
+            {activityFeedData && (
+              <ActivityFeed
+                agentId={activityFeedData.agentId}
+                entries={activityFeedData.entries}
+              />
+            )}
+
+            {/* Memory display — shown on demand ("what does my agent remember?") */}
+            {memoryData && (
+              <MemoryDisplay
+                agentId={memoryData.agentId}
+                memories={memoryData.memories}
+                learnings={memoryData.learnings}
+              />
+            )}
+
+            {/* Query routing visualization — shown on demand ("show routing decisions") */}
+            {routingData && (
+              <QueryRoutingViz decisions={routingData.decisions} />
             )}
           </div>
         )}

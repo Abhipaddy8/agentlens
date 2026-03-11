@@ -272,4 +272,70 @@
   .deploy-modal-enter {
     animation: deploy-modal-enter 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
   }
+
+  /* ── Activity Feed ──────────────────────────────────────────────── */
+
+  .activity-feed-card {
+    animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes activity-item-slide {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .activity-feed-item {
+    opacity: 0;
+    animation: activity-item-slide 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* ── Memory Display ─────────────────────────────────────────────── */
+
+  .memory-display-card {
+    animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes memory-item-fade {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .memory-item {
+    opacity: 0;
+    animation: memory-item-fade 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  /* ── Query Routing Viz ──────────────────────────────────────────── */
+
+  .routing-viz-card {
+    animation: card-enter 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes routing-row-enter {
+    from {
+      opacity: 0;
+      transform: translateX(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .routing-decision-row {
+    opacity: 0;
+    animation: routing-row-enter 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
 }

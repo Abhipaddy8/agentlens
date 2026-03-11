@@ -10,6 +10,9 @@ import { DeployPipeline, AgentConfig, CredentialMap } from "@/lib/deploy-pipelin
 import { shadowTest, generateDefaultTestCases } from "@/lib/shadow-tester";
 import { evaluateQuality, formatQualityReport } from "@/lib/quality-evaluator";
 import { recordDeployment, rollback as rollbackAgent, getActiveVersion, getPreviousVersion } from "@/lib/rollback-manager";
+import { getActivityFeed } from "@/lib/activity-feed";
+import { getMemories, getRecentLearnings } from "@/lib/memory-manager";
+import { getRoutingDecisions, getRoutingStats } from "@/lib/routing-tracker";
 
 /**
  * POST /api/chat
@@ -122,6 +125,49 @@ export async function POST(req: NextRequest) {
                 `2:${JSON.stringify(detected.map((d) => ({ type: "integration-prompt", ...d })))}\n`
               )
             );
+          }
+
+          // Detect memory/routing queries from latest user message
+          const lastUserMsg = (messages as ChatMessage[])
+            .filter((m: ChatMessage) => m.role === "user")
+            .pop()?.content?.toLowerCase() || "";
+
+          const memoryKeywords = ["what does it remember", "show memories", "what has it learned", "agent memory", "what it knows"];
+          const routingKeywords = ["how does it decide", "show routing", "routing decisions", "query routing", "how does it route"];
+
+          if (memoryKeywords.some((kw) => lastUserMsg.includes(kw))) {
+            try {
+              // Use a default agent ID — in production this comes from the active agent context
+              const agentId = "opera-crm-monitor";
+              const [memories, learnings] = await Promise.all([
+                getMemories(agentId),
+                getRecentLearnings(agentId, 5),
+              ]);
+              streamController.enqueue(
+                encoder.encode(
+                  `2:${JSON.stringify([{ type: "memory-display", memories, learnings }])}\n`
+                )
+              );
+            } catch {
+              // Non-critical
+            }
+          }
+
+          if (routingKeywords.some((kw) => lastUserMsg.includes(kw))) {
+            try {
+              const agentId = "opera-crm-monitor";
+              const [decisions, stats] = await Promise.all([
+                getRoutingDecisions(agentId, 10),
+                getRoutingStats(agentId),
+              ]);
+              streamController.enqueue(
+                encoder.encode(
+                  `2:${JSON.stringify([{ type: "routing-viz", decisions, stats }])}\n`
+                )
+              );
+            } catch {
+              // Non-critical
+            }
           }
 
           // Finish signal
@@ -287,6 +333,20 @@ async function handleDeploy(
               `arn:aws:lambda:${process.env.AWS_REGION || "us-east-1"}:${process.env.AWS_ACCOUNT_ID || "123456789012"}:function:agentlens-${event.agentId}`
             );
             emitText(`\n---\n\n**Deploy complete.**\n- Agent: \`${event.agentId}\`\n- Endpoint: \`${event.endpoint}\`\n- Dashboard: ${event.dashboardUrl}\n`);
+
+            // Stream initial activity feed entries after deploy
+            try {
+              const feed = await getActivityFeed(event.agentId!, 5);
+              if (feed.entries.length > 0) {
+                emitData([{ type: "activity-feed", entries: feed.entries }]);
+                emitText(`\n**Recent Activity** (${feed.entries.length} runs)\n`);
+                for (const entry of feed.entries.slice(0, 3)) {
+                  emitText(`- ${entry.summary}\n`);
+                }
+              }
+            } catch {
+              // Activity feed is non-critical, don't fail the deploy stream
+            }
           } else if (event.type === "deploy-error") {
             emitText(`\n[Deploy Error: ${event.message}]\n`);
           }

@@ -132,6 +132,56 @@ export interface AgentVersionEntry {
   lambdaArn?: string;
 }
 
+// --- Activity Feed Types ---
+
+export interface ActivityEntry {
+  id: string;
+  timestamp: string;
+  summary: string;
+  cost: number;
+  durationMs: number;
+  status: "success" | "warning" | "error";
+  details?: { steps: string[]; tools: string[]; tokensUsed: number };
+}
+
+// --- Memory Types ---
+
+export interface MemoryItem {
+  id: string;
+  content: string;
+  importance: number;
+  createdAt: string;
+  lastAccessed: string;
+  accessCount: number;
+}
+
+/** Learning record from the memory manager (agent-discovered patterns). */
+export interface Learning {
+  id: string;
+  content: string;
+  source: string;
+  learnedAt: string;
+}
+
+/** Learning item for display in the UI (simplified view). */
+export interface LearningItem {
+  id: string;
+  content: string;
+  learnedAt: string;
+  sourceRunId?: string;
+}
+
+// --- Routing Types ---
+
+export interface RoutingDecision {
+  queryPreview: string;
+  route: "web" | "database" | "documents" | "api";
+  confidence: number;
+  passedGate: boolean;
+  timestamp: string;
+  fallbackUsed?: boolean;
+}
+
 /** Field definition for the controller's tracking logic. */
 export interface FieldDefinition {
   key: BriefFieldKey;

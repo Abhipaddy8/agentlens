@@ -194,11 +194,22 @@ Resources:
           AttributeType: S
         - AttributeName: memoryId
           AttributeType: S
+        - AttributeName: importance_score
+          AttributeType: N
       KeySchema:
         - AttributeName: agentId
           KeyType: HASH
         - AttributeName: memoryId
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: importance-index
+          KeySchema:
+            - AttributeName: agentId
+              KeyType: HASH
+            - AttributeName: importance_score
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
 
   MemoryShortTable:
     Type: AWS::DynamoDB::Table
